@@ -32,6 +32,7 @@ namespace DARTWIC::API {
         Periodic,
         StateMachine,
         Sequence,
+        Timeline,
         Worker
     };
 
