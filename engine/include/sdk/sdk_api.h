@@ -53,7 +53,8 @@ namespace DARTWIC::API {
         CONTROL_OWNER,
         ACTIVE_CONTROLLER,
         LINKED_CALCULATION_SCRIPTS,
-        VALUE_OPTIONS
+        VALUE_OPTIONS,
+        STARTUP_VALUE
     };
 
     /**
@@ -92,6 +93,11 @@ namespace DARTWIC::API {
         uint32_t line_number = 0;
     };
 
+    struct StartupValue {
+        bool enabled = false;
+        double value = 0.0;
+    };
+
     enum class ChannelStorage {
         Dynamic,
         Fixed
@@ -104,7 +110,7 @@ namespace DARTWIC::API {
      * @category Channels
      */
     using ChannelValue = std::variant<double, int, std::string, bool, RecordMode, ControlPolicy,
-        std::vector<ChannelValueOption>, std::vector<ChannelCalculationLink>>;
+        std::vector<ChannelValueOption>, std::vector<ChannelCalculationLink>, StartupValue>;
 
     /**
      * Handler for a plugin-defined TEMPEST extension operation.
@@ -542,6 +548,11 @@ namespace DARTWIC::API {
         virtual nlohmann::json announceDiscoveredDevice(nlohmann::json candidate) {
             (void)candidate;
             return nlohmann::json::object();
+        }
+
+        virtual bool isNotificationMuted(const std::string& notification_id) {
+            (void)notification_id;
+            return false;
         }
     };
 }
