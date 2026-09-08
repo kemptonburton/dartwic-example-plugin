@@ -6,18 +6,23 @@
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <span>
 #include <string>
 #include <utility>
 #include <variant>
 #include <vector>
 
-#include <dartwic/share/DARTWICShareTransport.h>
+namespace DARTWIC::Share {
+    class ShareTransport;
+    using ShareTransportPtr = std::shared_ptr<ShareTransport>;
+}
 
 namespace DARTWIC::Modules {
     class BaseModule;
 }
 
 namespace DARTWIC::API {
+    /** DARTWIC Share Protocol transport SPI used by engine Share transports. */
     using ShareTransport = DARTWIC::Share::ShareTransport;
     using ShareTransportPtr = DARTWIC::Share::ShareTransportPtr;
 
@@ -105,6 +110,34 @@ namespace DARTWIC::API {
     };
 
     /**
+     * Stable, pre-resolved address of a fixed RAPID channel.
+     *
+     * Handles are intentionally opaque to plugins. Resolve them during task setup and
+     * reuse them in high-frequency callbacks to avoid channel-name lookup overhead.
+     * @dartwic-reference
+     * @category Channels
+     */
+    struct FixedChannelHandle {
+        uint32_t slot = 0;
+        uint64_t binding_generation = 0;
+
+        [[nodiscard]] bool valid() const noexcept { return binding_generation != 0; }
+    };
+
+    /**
+     * Ordered channel names and handles used by the fixed-channel batch APIs.
+     * @dartwic-reference
+     * @category Channels
+     */
+    struct FixedChannelBatch {
+        std::vector<std::string> channels;
+        std::vector<FixedChannelHandle> handles;
+
+        [[nodiscard]] size_t size() const noexcept { return handles.size(); }
+        [[nodiscard]] bool empty() const noexcept { return handles.empty(); }
+    };
+
+    /**
      * Value types accepted by channel read, write, and authority APIs.
      *
      * @dartwic-reference
@@ -187,7 +220,20 @@ namespace DARTWIC::API {
         virtual void clearRuntimeContext() = 0;
         // Keep new virtual functions appended so plugins built against the previous
         // TaskRuntime vtable retain the indices of all existing functions.
+        /** Declares this task's fixed snapshot inputs from on_configure. Every declared name
+         * must refer to fixed storage when configuration completes; missing/dynamic inputs
+         * fail task preparation. An empty list requests an empty fixed input snapshot.
+         * Calls from other callbacks throw rather than changing an active plan. */
         virtual void setFixedInputChannels(std::vector<std::string> channels) = 0;
+
+        /**
+         * Records one completed logical iteration of a long-running worker task.
+         *
+         * Worker callbacks own their internal loop, so the engine cannot infer
+         * individual iterations from callback returns. Plugins should call this
+         * once after each successful worker iteration. The engine samples the
+         * counter to publish the task's worker-rate diagnostic.
+         */
         virtual void recordWorkerCycle() = 0;
 
         template <typename T>
@@ -271,6 +317,8 @@ namespace DARTWIC::API {
      *
      * DARTWICShare continues to own channel/event synchronization and routing;
      * the factory only creates the network link used by a configured connection.
+     * @dartwic-reference
+     * @category Share
      */
     struct ShareTransportDefinition {
         std::string id;
@@ -326,12 +374,16 @@ namespace DARTWIC::API {
             std::optional<ChannelValue> default_value) = 0;
 
         /**
-         * Inserts a channel field and fails when the addressed channel or field already exists.
+         * Creates a missing channel with an initial field value; an existing channel is left unchanged.
+         *
+         * This is a no-op for an existing channel, including its storage class.
+         * To promote existing storage, use upsertChannelField with Fixed storage during configuration.
          * @dartwic-reference
          * @category Channels
          * @param channel Flat channel name.
          * @param field Field to insert.
          * @param value Initial field value.
+         * @param storage Storage used for a newly created channel; defaults to dynamic.
          */
         virtual void insertChannelField(const std::string& channel,
             ChannelField field,
@@ -345,11 +397,28 @@ namespace DARTWIC::API {
          * @param channel Flat channel name.
          * @param field Field to write.
          * @param value New field value.
+         * @param storage Storage used only when creating or promoting the channel; defaults to dynamic.
          */
         virtual void upsertChannelField(const std::string& channel,
             ChannelField field,
             ChannelValue value,
             ChannelStorage storage = ChannelStorage::Dynamic) = 0;
+
+        /**
+         * Creates a channel in fixed RAPID storage, or promotes an existing dynamic channel.
+         *
+         * Call during startup configuration or a task's on_configure callback. The engine's
+         * declared configuration transaction permits layout updates after active task snapshots
+         * drain, even when the layout is sealed. Direct layout changes outside that boundary
+         * remain restricted. This writes initial_value; ordinary subsequent field writes
+         * preserve fixed storage. Do not recreate the channel in every acquisition callback.
+         *
+         * @dartwic-reference
+         * @category Channels
+         * @param channel Flat channel name.
+         * @param initial_value Initial numeric value; defaults to zero.
+         */
+        void createFixedChannel(const std::string& channel, double initial_value = 0.0);
 
         /**
          * Removes a channel and its associated field data.
@@ -368,6 +437,13 @@ namespace DARTWIC::API {
          * @returns The plugin-qualified module type identifier.
          */
         virtual std::string registerModuleType(ModuleTypeDefinition definition) = 0;
+        /**
+         * Registers a custom Share transport factory under a plugin-qualified ID.
+         * @dartwic-reference
+         * @category Share
+         * @param definition Local ID, display name, editable defaults, and transport factory.
+         * @returns The plugin-qualified transport ID used by dartwic-share/connect.
+         */
         virtual std::string registerShareTransport(ShareTransportDefinition definition) = 0;
         /**
          * Registers a plugin-local task type and returns its qualified identifier.
@@ -485,11 +561,11 @@ namespace DARTWIC::API {
          */
         virtual void commandChannel(const std::string& channel, ChannelValue value) = 0;
         /**
-         * Sets the active controller's value without issuing a manual command.
+         * Establishes observe-only authority for the active task or loop, optionally writing its value.
          * @dartwic-reference
          * @category Channel Authority
          * @param channel Flat channel name.
-         * @param value Optional value; null clears the controller value.
+         * @param value Optional value; omitting it preserves the current numeric value.
          */
         virtual void setChannel(const std::string& channel, std::optional<ChannelValue> value = std::nullopt) = 0;
         /**
@@ -515,20 +591,82 @@ namespace DARTWIC::API {
          * auto_acknowledge_seconds. A stable correlation_key updates one event
          * instead of creating a new event for each heartbeat.
          *
+         * Optional `graphs` accepts an array of graph groups. Each group may be an array of shorthand
+         * strings or an object with a `series` array and optional `title` / `window_seconds` fields.
+         * Shorthand series use `|channel|`, `>value`, `>=value`, `<value`, `<=value`, or `=value` and
+         * may append `@1` through `@5` to select a Y axis. Object series accept `channel_reference`
+         * (or `expression`) plus `y_axis`, `label`, and `color`. For example:
+         * `{"graphs":[["|temperature|@1",">100@1"],["|pressure|@1","=50@2"]]}`.
          * @dartwic-reference
          * @category Events
+         * @param event Event declaration to create or refresh.
          * @returns The complete accepted ARGUS event record.
          */
         virtual nlohmann::json recordEvent(nlohmann::json event) { return nlohmann::json::object(); }
 
-        /** Updates the lifecycle status of an ARGUS event by event identifier. */
+        /**
+         * Updates the lifecycle status of an ARGUS event by event identifier.
+         * @param event_id Event identifier to update.
+         * @param status New lifecycle status.
+         */
         virtual bool updateEventStatus(const std::string& event_id, const std::string& status) {
             (void)event_id;
             (void)status;
             return false;
         }
 
-        /** Opens or updates a named interface workflow and returns its request descriptor. */
+        /**
+         * Resolves fixed channels during configuration to avoid repeated name lookup in callbacks.
+         * This does not make the complete callback, write wrapper, or commit allocation-free.
+         * Throws when a name is missing or does not refer to fixed storage.
+         * @dartwic-reference
+         * @category Channels
+         * @param channels Ordered fixed-channel names to resolve.
+         */
+        virtual FixedChannelBatch resolveFixedChannels(const std::vector<std::string>& channels) = 0;
+
+        /**
+         * Reads a coherent task-input snapshot into caller-owned storage.
+         *
+         * Declare these inputs with TaskRuntime::setFixedInputChannels during configuration.
+         * Outside a task snapshot, reads observe live values instead. Undeclared inputs in an
+         * ordinary partial snapshot also use live fallback, so declare every fixed input.
+         * Re-resolve after configuration changes; stale handles return the supplied fallback.
+         * @dartwic-reference
+         * @category Channels
+         * @param batch Previously resolved fixed-channel batch.
+         * @param destination Caller-owned output span with one element per channel.
+         * @param default_value Value used when a fixed-channel value is unavailable.
+         */
+        virtual void queryFixedChannelValues(const FixedChannelBatch& batch,
+            std::span<double> destination,
+            double default_value = 0.0) = 0;
+
+        /**
+         * Stages one value per fixed channel in the current task transaction.
+         *
+         * Preserves ordinary command-authority checks. This does not claim channel ownership.
+         * Outside a task transaction, values are written immediately through the ordinary
+         * path; the call alone does not establish a coherent multi-channel transaction.
+         * Reuse the batch and value buffer. Staging, attribution, commit, inline reactions,
+         * and recording still have costs beyond resolved-handle access.
+         * @dartwic-reference
+         * @category Channels
+         * @param batch Previously resolved fixed-channel batch.
+         * @param values Input span with one value per channel.
+         * @param timestamp Optional Unix-epoch timestamp in nanoseconds.
+         */
+        virtual void upsertFixedChannelValues(const FixedChannelBatch& batch,
+            std::span<const double> values,
+            std::optional<uint64_t> timestamp = std::nullopt) = 0;
+
+        /**
+         * Opens or updates a named interface workflow without blocking the plugin loop.
+         * The returned object contains a request_id which can be queried for its typed JSON result.
+         * @param ui_id Plugin-local interface workflow identifier.
+         * @param payload Workflow request payload.
+         * @param options Optional workflow behavior and presentation settings.
+         */
         virtual nlohmann::json requestInterfaceUi(
             const std::string& ui_id,
             nlohmann::json payload,
@@ -539,23 +677,44 @@ namespace DARTWIC::API {
             return nlohmann::json::object();
         }
 
-        /** Returns the current status and result for a named interface workflow request. */
+        /**
+         * Returns the current status and result of a named interface workflow request.
+         * @param request_id Interface workflow request identifier.
+         */
         virtual nlohmann::json getInterfaceUiRequest(const std::string& request_id) {
             (void)request_id;
             return nlohmann::json::object();
         }
 
-        /** Announces a device found by a plugin-owned discovery loop. */
+        /**
+         * Announces a device found by a plugin-owned discovery loop.
+         * @param candidate Discovered-device identity and connection metadata.
+         */
         virtual nlohmann::json announceDiscoveredDevice(nlohmann::json candidate) {
             (void)candidate;
             return nlohmann::json::object();
         }
 
+        /**
+         * Returns whether an engine-scoped notification owned by this plugin is muted.
+         * The host qualifies the plugin-local notification ID before reading global engine state.
+         * Calling this method also marks the mute rule as relevant for expiry purposes.
+         * @param notification_id Stable plugin-local notification identity.
+         */
         virtual bool isNotificationMuted(const std::string& notification_id) {
             (void)notification_id;
             return false;
         }
     };
+
+    inline void SDK_API::createFixedChannel(const std::string& channel, double initial_value) {
+        upsertChannelField(
+            channel,
+            ChannelField::VALUE,
+            ChannelValue{initial_value},
+            ChannelStorage::Fixed
+        );
+    }
 }
 
 #endif //SDK_API_H

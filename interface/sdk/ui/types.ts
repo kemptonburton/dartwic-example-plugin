@@ -249,3 +249,63 @@ export interface ManualRefreshButtonProps extends ButtonProps {
     /** Shows the spinning refresh state and disables the button. */
     isRefreshing?: boolean;
 }
+
+/** Props for selecting a live module instance compatible with a plugin task.  @dartwic-reference @category DARTWIC UI Components */
+export interface ModuleInstanceSelectProps extends HostComponentProps {
+    /** Engine plugin that must own every displayed module instance. */
+    pluginId: string;
+    /** Optional compatible module type IDs, in local or plugin-qualified form. */
+    moduleTypeIds?: string[];
+    /** Selected module-instance name. */
+    value?: string;
+    /** Called with the selected module-instance name. */
+    onValueChange?: (value: string) => void;
+    /** Empty-selection prompt. */
+    placeholder?: string;
+    /** Disables the selector. */
+    disabled?: boolean;
+    /** Shows loading, incompatibility, and empty-state diagnostics. */
+    showStatus?: boolean;
+}
+
+/** One live channel rendered beneath a linked module task.  @dartwic-reference @category DARTWIC UI Components */
+export interface ModuleRuntimeChannel {
+    /** RAPID channel name used for live telemetry. */
+    name: string;
+    /** Optional shorter visible label; the channel name is used by default. */
+    label?: string;
+    /** Direction relative to the device. */
+    direction?: "input" | "output" | "diagnostic";
+    /** Optional register, address, or mapping detail. */
+    detail?: string;
+}
+
+/** Props for the shared opt-in module connection indicator.  @dartwic-reference @category DARTWIC UI Components */
+export interface ModuleConnectionStatusProps extends HostComponentProps {
+    presentation: {
+        channel: string;
+        label?: string;
+        endpoint?: string;
+        connectedValue?: string | number | boolean;
+    };
+    showText?: boolean;
+    compact?: boolean;
+}
+
+/** Props for the standard linked-task, status, and channel overview on module pages.  @dartwic-reference @category DARTWIC UI Components */
+export interface ModuleRuntimeOverviewProps extends HostComponentProps {
+    /** Module instance whose linked tasks are displayed. */
+    instanceName: string;
+    /** Optional live boolean channel used for connection state. */
+    connectionChannel?: string;
+    /** Visible label beside the connection state. */
+    connectionLabel?: string;
+    /** Human-readable connection endpoint. */
+    endpoint?: string;
+    /** Optional task-type allowlist. */
+    taskTypeIds?: string[];
+    /** Maps a linked task's plugin arguments to visible live channels. */
+    resolveTaskChannels?: (task: any) => ModuleRuntimeChannel[];
+    /** Empty-state copy when no tasks reference the module. */
+    emptyMessage?: string;
+}
