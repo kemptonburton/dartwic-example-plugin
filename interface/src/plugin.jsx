@@ -3,7 +3,7 @@ import {ExampleModuleConfig} from "./moduleConfigs.jsx";
 import {ExamplePluginSettings} from "./pluginSettings.jsx";
 import {ExampleResource, ExampleSchematicNode} from "./resourcesAndSchematics.jsx";
 import {ExampleTaskCard} from "./taskCards.jsx";
-import {ExampleTaskConfig} from "./taskConfigs.jsx";
+import {ExampleTaskConfig, taskConfigs} from "./taskConfigs.jsx";
 import React from "../sdk/react.ts";
 
 function ExampleDeviceIcon(props) {
@@ -33,6 +33,16 @@ export default definePlugin({
             name: "Example Task UI",
             card: ExampleTaskCard,
             editor: ExampleTaskConfig,
+        });
+        registry.addTaskUi({
+            id: "mock_read",
+            name: "Mock Device Read",
+            editor: taskConfigs[0].component,
+        });
+        registry.addTaskUi({
+            id: "mock_write",
+            name: "Mock Device Write",
+            editor: taskConfigs[1].component,
         });
         registry.addModuleUi({
             id: "example_device",

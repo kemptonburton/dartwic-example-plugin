@@ -268,6 +268,41 @@ export interface ModuleInstanceSelectProps extends HostComponentProps {
     showStatus?: boolean;
 }
 
+/** Shared module selector, module link, and opt-in live connection status. @dartwic-reference @category DARTWIC UI Components */
+export interface ModuleInstanceConnectionProps extends ModuleInstanceSelectProps {
+    description?: string;
+    showSelector?: boolean;
+    showConnectionStatus?: boolean;
+    statusText?: boolean;
+    compact?: boolean;
+}
+
+/** One editable row in the standard task channel-binding table. @dartwic-reference @category DARTWIC UI Components */
+export interface TaskBinding {
+    id?: string;
+    [name: string]: unknown;
+}
+
+/** Standard task binding table shared by plugin task editors. @dartwic-reference @category DARTWIC UI Components */
+export interface TaskBindingTableProps extends HostComponentProps {
+    title?: string;
+    bindings: TaskBinding[];
+    onBindingsChange: (bindings: TaskBinding[]) => void;
+    bindingTypes: Array<{value: string; label: string}>;
+    channelMode?: "read" | "write";
+    typeKey?: string;
+    addressKey?: string;
+    channelKey?: string;
+    typeLabel?: string;
+    addressLabel?: string;
+    channelLabel?: string;
+    channelPlaceholder?: string;
+    emptyMessage?: string;
+    addLabel?: string;
+    normalizeChannelValue?: (value: string) => string;
+    createBinding?: (sequence: number) => TaskBinding;
+}
+
 /** One live channel rendered beneath a linked module task.  @dartwic-reference @category DARTWIC UI Components */
 export interface ModuleRuntimeChannel {
     /** RAPID channel name used for live telemetry. */

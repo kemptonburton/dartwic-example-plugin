@@ -1,6 +1,6 @@
 import { createHostComponent } from "../internal/createHostComponent.ts";
 import { getHostApi } from "../internal/host.ts";
-import type {ChannelComboBoxProps, ConfigurableInputProps, ManualRefreshButtonProps, ModuleConnectionStatusProps, ModuleInstanceSelectProps, ModuleRuntimeOverviewProps} from "./types.ts";
+import type {ChannelComboBoxProps, ConfigurableInputProps, ManualRefreshButtonProps, ModuleConnectionStatusProps, ModuleInstanceConnectionProps, ModuleInstanceSelectProps, ModuleRuntimeOverviewProps, TaskBindingTableProps} from "./types.ts";
 
 /** Selects a DARTWIC channel and, optionally, one of its fields. @dartwic-reference @category DARTWIC UI Components */
 export const ChannelComboBox = createHostComponent<ChannelComboBoxProps>("ChannelComboBox", (hostApi) => hostApi.helpers.ChannelComboBox);
@@ -10,10 +10,14 @@ export const ConfigurableInput = createHostComponent<ConfigurableInputProps>("Co
 export const ManualRefreshButton = createHostComponent<ManualRefreshButtonProps>("ManualRefreshButton", (hostApi) => hostApi.helpers.ManualRefreshButton);
 /** Selects only module instances owned by the requested plugin and compatible module types. @dartwic-reference @category DARTWIC UI Components */
 export const ModuleInstanceSelect = createHostComponent<ModuleInstanceSelectProps>("ModuleInstanceSelect", (hostApi) => hostApi.helpers.ModuleInstanceSelect);
+/** Renders the standard task-detail module selector, resource link, and live connection state. @dartwic-reference @category DARTWIC UI Components */
+export const ModuleInstanceConnection = createHostComponent<ModuleInstanceConnectionProps>("ModuleInstanceConnection", (hostApi) => hostApi.helpers.ModuleInstanceConnection);
 /** Renders the shared live connection indicator for an opted-in module.  @dartwic-reference @category DARTWIC UI Components */
 export const ModuleConnectionStatus = createHostComponent<ModuleConnectionStatusProps>("ModuleConnectionStatus", (hostApi) => hostApi.helpers.ModuleConnectionStatus);
 /** Shows a module's linked tasks, live connection state, and mapped channels using the host's standard presentation.  @dartwic-reference @category DARTWIC UI Components */
 export const ModuleRuntimeOverview = createHostComponent<ModuleRuntimeOverviewProps>("ModuleRuntimeOverview", (hostApi) => hostApi.helpers.ModuleRuntimeOverview);
+/** Renders the standard editable task channel-binding table. @dartwic-reference @category DARTWIC UI Components */
+export const TaskBindingTable = createHostComponent<TaskBindingTableProps>("TaskBindingTable", (hostApi) => hostApi.helpers.TaskBindingTable);
 /** Show the participants associated with a resource. @dartwic-reference @category DARTWIC UI Components */
 export const ResourceParticipantsIcon = createHostComponent<Record<string, unknown>>("ResourceParticipantsIcon", (hostApi) => hostApi.components.ResourceParticipantsIcon);
 /** Show resource synchronization status. @dartwic-reference @category DARTWIC UI Components */
@@ -75,4 +79,4 @@ export const buildParameterDisplayNodeDefinitionFromChannel = (channel: unknown,
 /** Normalize a legacy channel and field reference using host rules. @dartwic-reference @category DARTWIC UI Components */
 export const normalizeLegacyChannelFieldReference = (value: string, field?: string | null) => callHelper("normalizeLegacyChannelFieldReference", [value, field]);
 
-export type {ChannelComboBoxProps, ConfigurableInputProps, ManualRefreshButtonProps, ModuleConnectionStatusProps, ModuleInstanceSelectProps, ModuleRuntimeChannel, ModuleRuntimeOverviewProps} from "./types.ts";
+export type {ChannelComboBoxProps, ConfigurableInputProps, ManualRefreshButtonProps, ModuleConnectionStatusProps, ModuleInstanceConnectionProps, ModuleInstanceSelectProps, ModuleRuntimeChannel, ModuleRuntimeOverviewProps, TaskBinding, TaskBindingTableProps} from "./types.ts";
