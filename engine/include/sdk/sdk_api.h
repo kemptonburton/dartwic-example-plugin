@@ -13,13 +13,14 @@
 #include <variant>
 #include <vector>
 
-namespace TEMPEST { class Transport; }
+namespace TEMPEST { class Transport; class Peer; }
 
 namespace DARTWIC::Modules {
     class BaseModule;
 }
 
 namespace DARTWIC::API {
+    inline constexpr uint32_t ENGINE_PLUGIN_SDK_ABI = 2;
     /** TEMPEST transport interface used by custom engine connections. */
     using Transport = TEMPEST::Transport;
     using TransportPtr = std::shared_ptr<TEMPEST::Transport>;
@@ -153,6 +154,31 @@ namespace DARTWIC::API {
      * @category Operations
      */
     using OperationHandler = std::function<nlohmann::json(const nlohmann::json& payload)>;
+
+    /** A typed argument in a peer-visible command descriptor.
+     * @dartwic-reference
+     * @category Operations
+     */
+    struct OperationArgumentDefinition {
+        std::string name;
+        std::string type;
+        std::string description;
+        bool required = false;
+        std::optional<nlohmann::json> default_value;
+        std::vector<nlohmann::json> choices;
+    };
+    /** Registers an executable plugin operation and its operator-facing metadata.
+     * @dartwic-reference
+     * @category Operations
+     */
+    struct OperationDefinition {
+        std::string id;
+        std::string name;
+        std::string description;
+        std::string category;
+        std::vector<OperationArgumentDefinition> arguments;
+        OperationHandler handler;
+    };
 
     /**
      * Native callback exposed to DCode through the plugin SDK.
@@ -310,19 +336,20 @@ namespace DARTWIC::API {
         std::string default_parameters_path = "default_parameters.json";
     };
 
-    /**
-     * Declares a plugin-provided transport for TEMPEST messages.
-     *
-     * EnginePeers continues to own channel/event synchronization and routing;
-     * the factory only creates the network link used by a configured connection.
+    /** One operator-selectable peer with a fixed protocol and transport.
      * @dartwic-reference
      * @category TEMPEST
      */
-    struct TransportDefinition {
+    struct PeerDefinition {
         std::string id;
         std::string name;
+        uint64_t version = 1;
         nlohmann::json default_config = nlohmann::json::object();
+        std::string protocol_id = "tempest.peer";
+        uint64_t protocol_version = 1;
+        bool engine_protocol = false;
         std::function<TransportPtr(const nlohmann::json& config)> create;
+        std::function<void(TEMPEST::Peer& peer)> configure;
     };
 
     /**
@@ -436,13 +463,13 @@ namespace DARTWIC::API {
          */
         virtual std::string registerModuleType(ModuleTypeDefinition definition) = 0;
         /**
-         * Registers a custom TEMPEST transport factory under a plugin-qualified ID.
+         * Registers a plugin-qualified peer definition with one transport factory.
          * @dartwic-reference
          * @category TEMPEST
-         * @param definition Local ID, display name, editable defaults, and transport factory.
-         * @returns The plugin-qualified transport ID used by tempest/peers/connect.
+         * @param definition Local ID, display name, editable defaults, protocol, transport, and handlers.
+         * @returns The plugin-qualified peer ID used by tempest/peers/connect.
          */
-        virtual std::string registerTransport(TransportDefinition definition) = 0;
+        virtual std::string registerPeer(PeerDefinition definition) = 0;
         /**
          * Registers a plugin-local task type and returns its qualified identifier.
          * @dartwic-reference
@@ -457,12 +484,10 @@ namespace DARTWIC::API {
          * Registers a plugin extension operation; it does not become an official DARTWIC operation.
          * @dartwic-reference
          * @category Operations
-         * @param local_id Identifier unique within the plugin.
-         * @param name Operator-facing operation name.
-         * @param handler JSON request handler.
+         * @param definition Local ID, display metadata, argument fields, and handler.
          * @returns The plugin-qualified operation identifier.
          */
-        virtual std::string registerOperation(std::string local_id, std::string name, OperationHandler handler) = 0;
+        virtual std::string registerOperation(OperationDefinition definition) = 0;
         /**
          * Calls a named operation on a connected TEMPEST peer and waits for its result.
          * Payloads use JSON at the engine SDK boundary; Peer and custom transports use Value.

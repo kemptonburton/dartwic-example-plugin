@@ -35,6 +35,7 @@ struct ExampleTransport::Impl {
             receive.set(zmq::sockopt::rcvhwm, 256);
             receive.bind(receive_endpoint); send.connect(send_endpoint);
             started = true; ready.set_value();
+            std::string incoming;
             while (running) {
                 std::deque<TEMPEST::Message> pending;
                 { std::lock_guard lock(mutex); pending.swap(outgoing); }
@@ -56,19 +57,26 @@ struct ExampleTransport::Impl {
                 zmq::message_t frame;
                 while (receive.recv(frame, zmq::recv_flags::dontwait)) {
                     try {
-                        const auto bytes = frame.to_string();
-                        if (bytes.size() < 4 || bytes.size() > 1024*1024+4) continue;
-                        uint32_t size = 0;
-                        for (int i=0; i<4; ++i) size = (size<<8) | static_cast<unsigned char>(bytes[i]);
-                        if (size != bytes.size()-4) continue;
-                        auto record = nlohmann::json::parse(bytes.substr(4));
-                        const int kind = record.at("kind").get<int>();
-                        if (kind < 0 || kind > 2) continue;
-                        TEMPEST::Message m{static_cast<TEMPEST::Message::Kind>(kind), record.at("id"), record.at("name"),
-                            TEMPEST::Json::toValue(record.at("payload")).object(), record.at("error"), record.at("code")};
-                        { std::lock_guard lock(mutex); last = record; }
-                        ++count;
-                        callbacks.on_message(std::move(m));
+                        incoming += frame.to_string();
+                        if (incoming.size() > 2*1024*1024) { incoming.clear(); continue; }
+                        while (incoming.size() >= 4) {
+                            uint32_t size = 0;
+                            for (int i=0; i<4; ++i) size = (size<<8) | static_cast<unsigned char>(incoming[i]);
+                            if (size == 0 || size > 1024*1024) { incoming.clear(); break; }
+                            if (incoming.size() < size+4) break;
+                            const auto body = incoming.substr(4, size);
+                            incoming.erase(0, size+4);
+                            try {
+                                auto record = nlohmann::json::parse(body);
+                                const int kind = record.at("kind").get<int>();
+                                if (kind < 0 || kind > 2) continue;
+                                TEMPEST::Message m{static_cast<TEMPEST::Message::Kind>(kind), record.at("id"), record.at("name"),
+                                    TEMPEST::Json::toValue(record.at("payload")).object(), record.at("error"), record.at("code")};
+                                { std::lock_guard lock(mutex); last = record; }
+                                ++count;
+                                callbacks.on_message(std::move(m));
+                            } catch (...) { /* A malformed frame does not stop the stream. */ }
+                        }
                     } catch (...) { /* Reject malformed custom frames without stopping the link. */ }
                 }
                 std::unique_lock lock(mutex); wake.wait_for(lock, std::chrono::milliseconds(2));
@@ -100,6 +108,13 @@ void ExampleTransport::stop() {
     impl_->running = false; impl_->wake.notify_all();
     if (impl_->worker.joinable()) impl_->worker.join();
     std::lock_guard lock(impl_->mutex); impl_->callbacks = {}; impl_->outgoing.clear();
+}
+std::vector<TEMPEST::TransportPath> ExampleTransport::diagnostics() const {
+    std::lock_guard lock(impl_->mutex);
+    const auto state = impl_->running ? "open" : "closed";
+    return {{"example/pull", "PULL incoming frames", impl_->receive_endpoint, state, false, 0, 0, 0, 0, {}, "example/framed-zmq"},
+            {"example/push", "PUSH outgoing frames", impl_->send_endpoint, state, false, 0, 0,
+                impl_->outgoing.size(), 0, {}, "example/framed-zmq"}};
 }
 uint64_t ExampleTransport::receivedCount() const { return impl_->count; }
 nlohmann::json ExampleTransport::lastFrame() const { std::lock_guard lock(impl_->mutex); return impl_->last; }

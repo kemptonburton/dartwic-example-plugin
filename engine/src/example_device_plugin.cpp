@@ -1,5 +1,6 @@
 #include "example_device_plugin.h"
 #include "example_transport.h"
+#include <tempest/Peer.h>
 #include <sdk/notifications/NotificationMuteHandle.h>
 #include <array>
 #include <memory>
@@ -179,7 +180,7 @@ namespace Example {
             .target_frequency_hz = 1.0
         });
 
-        dartwic->registerTransport({
+        dartwic->registerPeer({
             .id = "example_flight_link",
             .name = "Example Flight Link",
             .default_config = {
@@ -187,8 +188,19 @@ namespace Example {
                 {"receive_endpoint", "tcp://127.0.0.1:17600"},
                 {"send_endpoint", "tcp://127.0.0.1:17601"}
             },
+            .protocol_id = "dartwic.engine",
+            .engine_protocol = true,
             .create = [](const nlohmann::json& config) {
                 return std::make_shared<ExampleTransport>(config);
+            },
+            .configure = [](TEMPEST::Peer& peer) {
+                peer.registerOperation({.name = "example/flight/ping", .display_name = "Flight link ping",
+                    .description = "Echo a marker through the custom framed peer link.", .category = "Example peer",
+                    .arguments = {{.name = "marker", .type = "string", .description = "Marker to echo."}}},
+                    [](const TEMPEST::Value::Object& args) { return args; });
+                peer.onTelemetry("example/flight/status", [](const TEMPEST::Value::Object&) {
+                    // A real plugin can project these samples into channels or events here.
+                });
             }
         });
 
@@ -312,14 +324,16 @@ namespace Example {
             }
         );
 
-        dartwic->registerOperation(
-            "echo",
-            "Echo",
-            [this](const nlohmann::json& payload) {
+        dartwic->registerOperation(DARTWIC::API::OperationDefinition{
+            .id = "echo",
+            .name = "Echo",
+            .description = "Echo the arguments and publish them as telemetry.",
+            .category = "Example peer",
+            .handler = [this](const nlohmann::json& payload) {
                 dartwic->publishTelemetry("echoed", payload);
                 return nlohmann::json{{"echo", payload}};
             }
-        );
+        });
 
         dartwic->registerLoop(
             "heartbeat",
@@ -342,6 +356,10 @@ namespace Example {
 
         return new ExampleDeviceModule(cfg, api);
     }
+}
+
+DARTWIC_PLUGIN_EXPORT uint32_t dartwicPluginSdkAbiVersion() {
+    return DARTWIC::API::ENGINE_PLUGIN_SDK_ABI;
 }
 
 DARTWIC_PLUGIN_EXPORT DARTWIC::Plugins::BasePlugin* createPlugin(
