@@ -7,24 +7,22 @@
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <variant>
 #include <vector>
 
-namespace DARTWIC::Share {
-    class ShareTransport;
-    using ShareTransportPtr = std::shared_ptr<ShareTransport>;
-}
+namespace TEMPEST { class Transport; }
 
 namespace DARTWIC::Modules {
     class BaseModule;
 }
 
 namespace DARTWIC::API {
-    /** DARTWIC Share Protocol transport SPI used by engine Share transports. */
-    using ShareTransport = DARTWIC::Share::ShareTransport;
-    using ShareTransportPtr = DARTWIC::Share::ShareTransportPtr;
+    /** TEMPEST transport interface used by custom engine connections. */
+    using Transport = TEMPEST::Transport;
+    using TransportPtr = std::shared_ptr<TEMPEST::Transport>;
 
     /**
      * Execution shape used by a registered task type.
@@ -313,18 +311,18 @@ namespace DARTWIC::API {
     };
 
     /**
-     * Declares a plugin-provided transport for DARTWIC Share frames.
+     * Declares a plugin-provided transport for TEMPEST messages.
      *
-     * DARTWICShare continues to own channel/event synchronization and routing;
+     * EnginePeers continues to own channel/event synchronization and routing;
      * the factory only creates the network link used by a configured connection.
      * @dartwic-reference
-     * @category Share
+     * @category TEMPEST
      */
-    struct ShareTransportDefinition {
+    struct TransportDefinition {
         std::string id;
         std::string name;
         nlohmann::json default_config = nlohmann::json::object();
-        std::function<ShareTransportPtr(const nlohmann::json& config)> create;
+        std::function<TransportPtr(const nlohmann::json& config)> create;
     };
 
     /**
@@ -438,13 +436,13 @@ namespace DARTWIC::API {
          */
         virtual std::string registerModuleType(ModuleTypeDefinition definition) = 0;
         /**
-         * Registers a custom Share transport factory under a plugin-qualified ID.
+         * Registers a custom TEMPEST transport factory under a plugin-qualified ID.
          * @dartwic-reference
-         * @category Share
+         * @category TEMPEST
          * @param definition Local ID, display name, editable defaults, and transport factory.
-         * @returns The plugin-qualified transport ID used by dartwic-share/connect.
+         * @returns The plugin-qualified transport ID used by tempest/peers/connect.
          */
-        virtual std::string registerShareTransport(ShareTransportDefinition definition) = 0;
+        virtual std::string registerTransport(TransportDefinition definition) = 0;
         /**
          * Registers a plugin-local task type and returns its qualified identifier.
          * @dartwic-reference
@@ -465,6 +463,32 @@ namespace DARTWIC::API {
          * @returns The plugin-qualified operation identifier.
          */
         virtual std::string registerOperation(std::string local_id, std::string name, OperationHandler handler) = 0;
+        /**
+         * Calls a named operation on a connected TEMPEST peer and waits for its result.
+         * Payloads use JSON at the engine SDK boundary; Peer and custom transports use Value.
+         * A timeout reports unknown completion and never retries the operation.
+         * @dartwic-reference
+         * @category Operations
+         * @param node Remote node name.
+         * @param operation Fully qualified operation name, such as fprime/command.
+         * @param payload Operation arguments.
+         * @returns The remote result; throws on disconnection, timeout, or remote failure.
+         */
+        virtual nlohmann::json callTempest(const std::string& node, const std::string& operation,
+                                           const nlohmann::json& payload) {
+            throw std::runtime_error("TEMPEST peer calls are unavailable in this SDK host.");
+        }
+        /**
+         * Publishes telemetry on a plugin-qualified topic to connected clients and peers.
+         * Delivery is best effort; subscribers may miss samples while disconnected.
+         * @dartwic-reference
+         * @category Operations
+         * @param topic Plugin-local topic name.
+         * @param payload Object containing the telemetry values.
+         */
+        virtual void publishTelemetry(const std::string& topic, const nlohmann::json& payload) {
+            throw std::runtime_error("TEMPEST telemetry is unavailable in this SDK host.");
+        }
         /**
          * Registers a native DCode function together with its editor-facing argument documentation.
          * @dartwic-reference

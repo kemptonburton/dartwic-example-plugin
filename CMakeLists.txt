@@ -32,19 +32,22 @@ if(NORMALIZED_BUILD_TYPE STREQUAL "debug")
     set(ENGINE_PLUGIN_VARIANT "engine-debug")
 endif()
 
+if(CMAKE_CONFIGURATION_TYPES)
+    set(ENGINE_PLUGIN_VARIANT "$<IF:$<CONFIG:Debug>,engine-debug,engine>")
+endif()
 set(ENGINE_PLUGIN_DIR "${PROJECT_SOURCE_DIR}/plugin/${ENGINE_PLUGIN_VARIANT}/${ENGINE_PLUGIN_ID}")
 
 file(GLOB_RECURSE EXAMPLE_ENGINE_SOURCES "${ENGINE_DIR}/src/*.cpp")
 add_library(example_device_plugin_engine SHARED ${EXAMPLE_ENGINE_SOURCES})
 
 get_filename_component(DARTWIC_REPOSITORY_ROOT "${PROJECT_SOURCE_DIR}/../.." ABSOLUTE)
-if(NOT TARGET DARTWICShareProtocol)
-    if(EXISTS "${DARTWIC_REPOSITORY_ROOT}/sdk/dartwic-share-protocol/CMakeLists.txt")
+if(NOT TARGET DARTWICEngineProtocol)
+    if(EXISTS "${DARTWIC_REPOSITORY_ROOT}/sdk/dartwic-engine-protocol/CMakeLists.txt")
         add_subdirectory(
-            "${DARTWIC_REPOSITORY_ROOT}/sdk/dartwic-share-protocol"
+            "${DARTWIC_REPOSITORY_ROOT}/sdk/dartwic-engine-protocol"
             "${CMAKE_CURRENT_BINARY_DIR}/dartwic-share-protocol")
     else()
-        message(FATAL_ERROR "The example Share transport requires the DARTWICShareProtocol package.")
+        message(FATAL_ERROR "The example Share transport requires the DARTWICEngineProtocol package.")
     endif()
 endif()
 
@@ -62,9 +65,13 @@ find_package(cppzmq CONFIG REQUIRED)
 
 target_link_libraries(example_device_plugin_engine PRIVATE
         nlohmann_json::nlohmann_json)
+if(NOT TARGET TEMPEST::Peer)
+    add_subdirectory("${DARTWIC_REPOSITORY_ROOT}/tempest/peer" "${CMAKE_CURRENT_BINARY_DIR}/tempest-peer")
+endif()
 target_link_libraries(example_device_plugin_engine PRIVATE
+        TEMPEST::Peer
         cppzmq
-        DARTWIC::ShareProtocol)
+        DARTWIC::EngineProtocol)
 
 set_target_properties(example_device_plugin_engine PROPERTIES
         OUTPUT_NAME "${ENGINE_PLUGIN_ID}"

@@ -1,5 +1,5 @@
 #include "example_device_plugin.h"
-#include "example_share_transport.h"
+#include "example_transport.h"
 #include <sdk/notifications/NotificationMuteHandle.h>
 #include <array>
 #include <memory>
@@ -179,7 +179,7 @@ namespace Example {
             .target_frequency_hz = 1.0
         });
 
-        dartwic->registerShareTransport({
+        dartwic->registerTransport({
             .id = "example_flight_link",
             .name = "Example Flight Link",
             .default_config = {
@@ -188,7 +188,7 @@ namespace Example {
                 {"send_endpoint", "tcp://127.0.0.1:17601"}
             },
             .create = [](const nlohmann::json& config) {
-                return std::make_shared<ExampleShareTransport>(config);
+                return std::make_shared<ExampleTransport>(config);
             }
         });
 
@@ -315,7 +315,8 @@ namespace Example {
         dartwic->registerOperation(
             "echo",
             "Echo",
-            [](const nlohmann::json& payload) {
+            [this](const nlohmann::json& payload) {
+                dartwic->publishTelemetry("echoed", payload);
                 return nlohmann::json{{"echo", payload}};
             }
         );
