@@ -20,7 +20,7 @@ namespace DARTWIC::Modules {
 }
 
 namespace DARTWIC::API {
-    inline constexpr uint32_t ENGINE_PLUGIN_SDK_ABI = 2;
+    inline constexpr uint32_t ENGINE_PLUGIN_SDK_ABI = 3;
     /** TEMPEST transport interface used by custom engine connections. */
     using Transport = TEMPEST::Transport;
     using TransportPtr = std::shared_ptr<TEMPEST::Transport>;
@@ -178,6 +178,17 @@ namespace DARTWIC::API {
         std::string category;
         std::vector<OperationArgumentDefinition> arguments;
         OperationHandler handler;
+    };
+
+    /** Declares an operator-visible telemetry topic before its first publication.
+     * @dartwic-reference
+     * @category Operations
+     */
+    struct TelemetryDefinition {
+        std::string id;
+        std::string name;
+        std::string description;
+        std::string delivery;
     };
 
     /**
@@ -488,6 +499,15 @@ namespace DARTWIC::API {
          * @returns The plugin-qualified operation identifier.
          */
         virtual std::string registerOperation(OperationDefinition definition) = 0;
+        /**
+         * Registers a plugin-local telemetry topic for the runtime catalog.
+         * The plugin namespace supplies the qualified topic and operator category.
+         * @dartwic-reference
+         * @category Operations
+         * @param definition Local topic ID and operator-facing metadata.
+         * @returns The plugin-qualified topic.
+         */
+        virtual std::string registerTelemetry(TelemetryDefinition definition) = 0;
         /**
          * Calls a named operation on a connected TEMPEST peer and waits for its result.
          * Payloads use JSON at the engine SDK boundary; Peer and custom transports use Value.

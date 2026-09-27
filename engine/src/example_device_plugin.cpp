@@ -324,6 +324,13 @@ namespace Example {
             }
         );
 
+        dartwic->registerTelemetry(DARTWIC::API::TelemetryDefinition{
+            .id = "echoed",
+            .name = "Echoed payload",
+            .description = "Arguments published by the example echo operation.",
+            .delivery = "Published when the echo operation runs."
+        });
+
         dartwic->registerOperation(DARTWIC::API::OperationDefinition{
             .id = "echo",
             .name = "Echo",
