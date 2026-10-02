@@ -188,7 +188,7 @@ namespace Example {
                 {"receive_endpoint", "tcp://127.0.0.1:17600"},
                 {"send_endpoint", "tcp://127.0.0.1:17601"}
             },
-            .protocol_id = "dartwic.engine",
+            .protocol_id = "tempest.engine",
             .engine_protocol = true,
             .create = [](const nlohmann::json& config) {
                 return std::make_shared<ExampleTransport>(config);
@@ -363,10 +363,6 @@ namespace Example {
 
         return new ExampleDeviceModule(cfg, api);
     }
-}
-
-DARTWIC_PLUGIN_EXPORT uint32_t dartwicPluginSdkAbiVersion() {
-    return DARTWIC::API::ENGINE_PLUGIN_SDK_ABI;
 }
 
 DARTWIC_PLUGIN_EXPORT DARTWIC::Plugins::BasePlugin* createPlugin(

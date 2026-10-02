@@ -33,6 +33,17 @@ export function useDartwicChannelValues(...args: unknown[]) {
     return callHostHook("useDartwicChannelValues", args);
 }
 
+/** Lists remote TEMPEST nodes, operations, and pins and calls peer commands. @dartwic-reference @category Hooks and Utilities */
+export function useRemoteTempest() {
+    return callHostHook("useRemoteTempest") as {
+        listNodes(): Promise<Record<string, unknown>[]>;
+        listOperations(node: string): Promise<Record<string, unknown>[]>;
+        listPinnedCommands(node: string, peerId: string): Promise<Record<string, unknown>[]>;
+        call(node: string, operation: string, args?: Record<string, unknown>): Promise<Record<string, unknown>>;
+        callPinned(node: string, preset: string, overrides?: Record<string, unknown>): Promise<Record<string, unknown>>;
+    };
+}
+
 /** Evaluate serialized configurable-input state through the host hook. @dartwic-reference @category Hooks and Utilities */
 export function useConfigurableInput(data: Record<string, unknown>) {
     return callHostHook("useConfigurableInput", [data]);

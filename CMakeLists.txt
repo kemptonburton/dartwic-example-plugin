@@ -45,9 +45,9 @@ if(NOT TARGET DARTWICEngineProtocol)
     if(EXISTS "${DARTWIC_REPOSITORY_ROOT}/sdk/dartwic-engine-protocol/CMakeLists.txt")
         add_subdirectory(
             "${DARTWIC_REPOSITORY_ROOT}/sdk/dartwic-engine-protocol"
-            "${CMAKE_CURRENT_BINARY_DIR}/dartwic-share-protocol")
+            "${CMAKE_CURRENT_BINARY_DIR}/tempest-peer-protocol")
     else()
-        message(FATAL_ERROR "The example Share transport requires the DARTWICEngineProtocol package.")
+        message(FATAL_ERROR "The example peer transport requires the DARTWICEngineProtocol package.")
     endif()
 endif()
 
@@ -97,8 +97,8 @@ set(ENGINE_PLUGIN_COPY_COMMANDS
         "${ENGINE_DIR}/src/default_parameters.json"
         "${ENGINE_PLUGIN_DIR}/default_parameters.json"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${ENGINE_DIR}/src/share_config.json"
-        "${ENGINE_PLUGIN_DIR}/share_config.json")
+        "${ENGINE_DIR}/src/peer_config.json"
+        "${ENGINE_PLUGIN_DIR}/peer_config.json")
 
 add_custom_target(example_device_plugin ALL
         ${ENGINE_PLUGIN_COPY_COMMANDS}

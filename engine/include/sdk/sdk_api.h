@@ -12,6 +12,7 @@
 #include <utility>
 #include <variant>
 #include <vector>
+#include "channel_references.h"
 
 namespace TEMPEST { class Transport; class Peer; }
 
@@ -20,7 +21,6 @@ namespace DARTWIC::Modules {
 }
 
 namespace DARTWIC::API {
-    inline constexpr uint32_t ENGINE_PLUGIN_SDK_ABI = 3;
     /** TEMPEST transport interface used by custom engine connections. */
     using Transport = TEMPEST::Transport;
     using TransportPtr = std::shared_ptr<TEMPEST::Transport>;
@@ -774,6 +774,59 @@ namespace DARTWIC::API {
             (void)notification_id;
             return false;
         }
+
+        /**
+         * Appends text to an ARGUS log stream without creating an operator event.
+         * Plugin calls use a plugin-qualified stream name, such as `ethercat/Bus`.
+         * The engine supplies the node, session, timestamp, and sequence. Writes
+         * are asynchronous and return false if the bounded queue is full.
+         * @dartwic-reference
+         * @category Logs
+         * @param stream Plugin-local stream name, such as `Bus`.
+         * @param text Text to append; a trailing newline is optional.
+         * @param channel `stdout` or `stderr` for console-style coloring.
+         * @param level `info`, `warning`, or `error` for filtering.
+         * @returns Whether ARGUS accepted the text for writing.
+         * @example api.writeLog("Bus", "Device connected", "stdout", "info");
+         */
+        virtual bool writeLog(const std::string& stream, const std::string& text,
+            const std::string& channel = "stdout", const std::string& level = "info") {
+            (void)stream;
+            (void)text;
+            (void)channel;
+            (void)level;
+            return false;
+        }
+
+        /** Optional channel references held only in plugin-private memory.
+         * Register during onPluginLoaded. The callback runs during a Project
+         * audit, never in a task loop. Add exact references or scan structured
+         * plugin data with the sink. Ordinary task data, fixed bindings,
+         * project files, and channel origins are found automatically.
+         * New virtual methods belong at the end of SDK_API so plugins compiled
+         * against an earlier SDK keep the same virtual method positions.
+         */
+        virtual void registerChannelReferenceSource(std::string local_id,
+            std::function<void(ChannelReferenceSink&)> collect) {
+            (void)local_id;
+            (void)collect;
+            throw std::runtime_error("Channel reference sources are unavailable in this SDK host.");
+        }
+
+        /**
+         * Calls a saved command on a connected remote TEMPEST node once.
+         * @dartwic-reference
+         * @category Operations
+         * @param node Remote node name.
+         * @param preset Stable pinned-command ID or unambiguous label for that node.
+         * @param overrides Object merged over saved command arguments.
+         * @returns Remote result; throws if the preset is missing, ambiguous, or the peer call fails.
+         */
+        virtual nlohmann::json callPinnedTempest(const std::string& node, const std::string& preset,
+                                                  const nlohmann::json& overrides = nlohmann::json::object()) {
+            throw std::runtime_error("Pinned TEMPEST peer calls are unavailable in this SDK host.");
+        }
+
     };
 
     inline void SDK_API::createFixedChannel(const std::string& channel, double initial_value) {
