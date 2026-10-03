@@ -319,6 +319,10 @@ namespace DARTWIC::API {
         TaskMissedFunction on_missed;
         TaskLifecycleFunction on_end;
         TaskCleanupFunction cleanup;
+        // Suppress timing warnings; scheduling, measurements and callback errors remain active.
+        void setDisableWarnings(bool disabled = true) {
+            metadata.default_arguments["disable_warnings"] = disabled;
+        }
     };
 
     /**
