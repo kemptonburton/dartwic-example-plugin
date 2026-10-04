@@ -178,6 +178,7 @@ namespace DARTWIC::API {
         std::string category;
         std::vector<OperationArgumentDefinition> arguments;
         OperationHandler handler;
+        bool allow_viewers = false;
     };
 
     /** Declares an operator-visible telemetry topic before its first publication.
