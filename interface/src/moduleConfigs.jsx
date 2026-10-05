@@ -7,3 +7,10 @@ export function ExampleModuleConfig() {
         </div>
     );
 }
+
+export function RocketModuleConfig() {
+    return <div className="space-y-2 text-sm">
+        <p>This module simulates device registers and actuator feedback. It opens no hardware connection.</p>
+        <p>Bind Mock Rocket Read and Mock Rocket Write to this instance. Use their shared channel prefix to choose the signal namespace. Fault inputs are exposed on the rocket schematic.</p>
+    </div>;
+}

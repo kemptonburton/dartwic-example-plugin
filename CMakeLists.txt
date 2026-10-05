@@ -37,18 +37,18 @@ if(CMAKE_CONFIGURATION_TYPES)
 endif()
 set(ENGINE_PLUGIN_DIR "${PROJECT_SOURCE_DIR}/plugin/${ENGINE_PLUGIN_VARIANT}/${ENGINE_PLUGIN_ID}")
 
-file(GLOB_RECURSE EXAMPLE_ENGINE_SOURCES "${ENGINE_DIR}/src/*.cpp")
+file(GLOB_RECURSE EXAMPLE_ENGINE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/src/*.cpp")
 add_library(example_device_plugin_engine SHARED ${EXAMPLE_ENGINE_SOURCES})
 
-get_filename_component(DARTWIC_REPOSITORY_ROOT "${PROJECT_SOURCE_DIR}/../.." ABSOLUTE)
-if(NOT TARGET DARTWICEngineProtocol)
-    if(EXISTS "${DARTWIC_REPOSITORY_ROOT}/sdk/dartwic-engine-protocol/CMakeLists.txt")
-        add_subdirectory(
-            "${DARTWIC_REPOSITORY_ROOT}/sdk/dartwic-engine-protocol"
-            "${CMAKE_CURRENT_BINARY_DIR}/tempest-peer-protocol")
-    else()
-        message(FATAL_ERROR "The example peer transport requires the DARTWICEngineProtocol package.")
-    endif()
+# Public, locked dependency snapshots: no private checkout is required.
+if(NOT TARGET TEMPEST::Messaging)
+    add_subdirectory(vendor/messaging)
+endif()
+if(NOT TARGET TEMPEST::Peer)
+    add_subdirectory(vendor/peer)
+endif()
+if(NOT TARGET DARTWIC::EngineProtocol)
+    add_subdirectory(vendor/engine-protocol)
 endif()
 
 file(GLOB ENGINE_INCLUDE_DIRS
@@ -65,9 +65,6 @@ find_package(cppzmq CONFIG REQUIRED)
 
 target_link_libraries(example_device_plugin_engine PRIVATE
         nlohmann_json::nlohmann_json)
-if(NOT TARGET TEMPEST::Peer)
-    add_subdirectory("${DARTWIC_REPOSITORY_ROOT}/tempest/peer" "${CMAKE_CURRENT_BINARY_DIR}/tempest-peer")
-endif()
 target_link_libraries(example_device_plugin_engine PRIVATE
         TEMPEST::Peer
         cppzmq
@@ -111,3 +108,7 @@ add_custom_target(copy_engine_plugin
 message(STATUS "Example engine plugin dir: ${ENGINE_PLUGIN_DIR}")
 message(STATUS "Example engine plugin variant: ${ENGINE_PLUGIN_VARIANT}")
 message(STATUS "Using the bundled Engine SDK snapshot from engine/include/sdk.")
+
+add_executable(rocket-flight-peer examples/flight-peer/main.cpp engine/src/example_transport.cpp)
+target_include_directories(rocket-flight-peer PRIVATE engine/include)
+target_link_libraries(rocket-flight-peer PRIVATE TEMPEST::Peer DARTWIC::EngineProtocol cppzmq nlohmann_json::nlohmann_json)

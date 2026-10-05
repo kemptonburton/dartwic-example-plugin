@@ -268,12 +268,36 @@ export interface ModuleInstanceSelectProps extends HostComponentProps {
     showStatus?: boolean;
 }
 
+/** One searchable option displayed by the host-owned combobox. @dartwic-reference @category DARTWIC UI Components */
+export interface ComboboxSearchItem {
+    value: string;
+    label: HostNode;
+}
+
+/** Props for the standard host-owned searchable list selector. @dartwic-reference @category DARTWIC UI Components */
+export interface ComboboxSearchProps extends HostComponentProps {
+    items: ComboboxSearchItem[];
+    initialValue?: string;
+    placeholder?: string;
+    commandSearchPlaceholder?: string;
+    commandSearchEmptyPlaceholder?: string;
+    overrideValue?: HostNode;
+    onSelect?: (value: string) => void;
+    unSelectable?: boolean;
+    popoverContentClassName?: string;
+}
+
 /** Shared module selector, module link, and opt-in live connection status. @dartwic-reference @category DARTWIC UI Components */
 export interface ModuleInstanceConnectionProps extends ModuleInstanceSelectProps {
+    /** Supporting copy shown beneath the shared control. */
     description?: string;
+    /** Hides the selector and presents only the linked module. */
     showSelector?: boolean;
+    /** Shows the module's plugin-declared connection state when available. */
     showConnectionStatus?: boolean;
+    /** Shows connection-state text instead of a compact indicator. */
     statusText?: boolean;
+    /** Uses the compact header/footer layout. */
     compact?: boolean;
 }
 
@@ -299,8 +323,20 @@ export interface TaskBindingTableProps extends HostComponentProps {
     channelPlaceholder?: string;
     emptyMessage?: string;
     addLabel?: string;
+    addDisabled?: boolean;
     normalizeChannelValue?: (value: string) => string;
     createBinding?: (sequence: number) => TaskBinding;
+    /** Optional plugin-defined columns rendered with the standard host table styling. */
+    columns?: Array<{
+        key?: string;
+        label: HostNode;
+        width?: string;
+        render: (binding: TaskBinding, index: number, updateBinding: (binding: TaskBinding) => void) => HostNode;
+    }>;
+    /** Optional controls replacing the standard single add button. */
+    headerActions?: HostNode;
+    /** Minimum width of the horizontally scrollable table content. */
+    minTableWidth?: string;
 }
 
 /** One live channel rendered beneath a linked module task.  @dartwic-reference @category DARTWIC UI Components */

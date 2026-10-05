@@ -14,6 +14,8 @@ import type {
     TaskUiDefinition,
     ValueFormatDefinition,
 } from "./types/index.ts";
+export {createNotificationClient} from "./notifications/index.ts";
+export type {NotificationSeverity, SettingsDestination, LocalNotification, SettingsIssue, LocalNotificationClient} from "./notifications/index.ts";
 
 const EMPTY_CONTRIBUTIONS = (): InterfaceContributions => ({
     valueFormats: [],

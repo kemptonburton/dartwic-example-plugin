@@ -132,6 +132,8 @@ export interface ValueFormatDefinition extends NamedContribution {
 
 /** Host services and shared component inventory supplied to a loaded interface plugin. @dartwic-reference @category Runtime */
 export interface InterfacePluginHostApi {
+    /** Optional local notification/issue services. Older hosts may not expose this capability. */
+    notifications?: {createClient(source: string): import("../notifications/index.ts").LocalNotificationClient};
     React: Record<string, unknown>;
     useDartwic: (...args: unknown[]) => unknown;
     components: Record<string, unknown>;

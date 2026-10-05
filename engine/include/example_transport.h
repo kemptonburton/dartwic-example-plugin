@@ -1,7 +1,7 @@
 #pragma once
 
-#include <sdk_api.h>
 #include <tempest/Transport.h>
+#include <nlohmann/json_fwd.hpp>
 
 #include <cstdint>
 #include <memory>
@@ -13,7 +13,7 @@ namespace Example {
  * plugin registration does not pull the chosen networking library into every
  * plugin translation unit.
  */
-class ExampleTransport final : public DARTWIC::API::Transport {
+class ExampleTransport final : public TEMPEST::Transport {
 public:
     explicit ExampleTransport(nlohmann::json config);
     ~ExampleTransport() override;

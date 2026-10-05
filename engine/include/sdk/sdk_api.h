@@ -504,6 +504,15 @@ namespace DARTWIC::API {
          * @returns The plugin-qualified operation identifier.
          */
         virtual std::string registerOperation(OperationDefinition definition) = 0;
+        // Convenience for operations without argument metadata. Delegates to the
+        // registered definition and does not add a virtual slot to the SDK ABI.
+        std::string registerOperation(std::string local_id, std::string name, OperationHandler handler) {
+            OperationDefinition definition;
+            definition.id = std::move(local_id);
+            definition.name = std::move(name);
+            definition.handler = std::move(handler);
+            return registerOperation(std::move(definition));
+        }
         /**
          * Registers a plugin-local telemetry topic for the runtime catalog.
          * The plugin namespace supplies the qualified topic and operator category.
@@ -514,15 +523,15 @@ namespace DARTWIC::API {
          */
         virtual std::string registerTelemetry(TelemetryDefinition definition) = 0;
         /**
-         * Calls a named operation on a connected TEMPEST peer and waits for its result.
-         * Payloads use JSON at the engine SDK boundary; Peer and custom transports use Value.
-         * A timeout reports unknown completion and never retries the operation.
+         * Calls a registered TEMPEST operation on the current node or a connected peer.
+         * Payloads use JSON at the engine SDK boundary; peers use Value.
+         * A remote timeout reports unknown completion and never retries the operation.
          * @dartwic-reference
          * @category Operations
-         * @param node Remote node name.
+         * @param node Current engine node name or connected remote node name.
          * @param operation Fully qualified operation name, such as fprime/command.
          * @param payload Operation arguments.
-         * @returns The remote result; throws on disconnection, timeout, or remote failure.
+         * @returns The operation result; throws on local failure, disconnection, timeout, or remote failure.
          */
         virtual nlohmann::json callTempest(const std::string& node, const std::string& operation,
                                            const nlohmann::json& payload) {
@@ -739,7 +748,10 @@ namespace DARTWIC::API {
          * The returned object contains a request_id which can be queried for its typed JSON result.
          * @param ui_id Plugin-local interface workflow identifier.
          * @param payload Workflow request payload.
-         * @param options Optional workflow behavior and presentation settings.
+         * @param options Optional workflow settings; severity is message (default), warning, or error.
+
+         * @dartwic-reference
+         * @category Interface UI and Notifications
          */
         virtual nlohmann::json requestInterfaceUi(
             const std::string& ui_id,
@@ -819,13 +831,13 @@ namespace DARTWIC::API {
         }
 
         /**
-         * Calls a saved command on a connected remote TEMPEST node once.
+         * Calls a saved pinned operation on the current engine or a connected remote node once.
          * @dartwic-reference
          * @category Operations
-         * @param node Remote node name.
-         * @param preset Stable pinned-command ID or unambiguous label for that node.
-         * @param overrides Object merged over saved command arguments.
-         * @returns Remote result; throws if the preset is missing, ambiguous, or the peer call fails.
+         * @param node Current engine node name or connected remote node name.
+         * @param preset Stable pinned-operation ID or unambiguous label for that node.
+         * @param overrides Object merged over saved operation arguments.
+         * @returns Operation result; throws if the preset is missing, ambiguous, or invocation fails.
          */
         virtual nlohmann::json callPinnedTempest(const std::string& node, const std::string& preset,
                                                   const nlohmann::json& overrides = nlohmann::json::object()) {

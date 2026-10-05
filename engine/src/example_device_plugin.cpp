@@ -1,5 +1,6 @@
 #include "example_device_plugin.h"
 #include "example_transport.h"
+#include "rocket_sim_module.h"
 #include <tempest/Peer.h>
 #include <sdk/notifications/NotificationMuteHandle.h>
 #include <array>
@@ -169,6 +170,7 @@ private:
 }
 namespace Example {
     void ExampleDevicePlugin::onPluginLoaded() {
+        registerRocketDriver(dartwic);
         dartwic->registerModuleType({
             .id = "example_device",
             .name = "Example Device"
@@ -357,6 +359,7 @@ namespace Example {
         nlohmann::json cfg,
         DARTWIC::API::SDK_API* api
     ) {
+        if (module_type_id == "rocket_sim") return new RocketSimModule(std::move(cfg), api);
         if (module_type_id != "example_device") {
             return nullptr;
         }

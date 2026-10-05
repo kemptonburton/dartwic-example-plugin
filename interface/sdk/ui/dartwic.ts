@@ -1,9 +1,11 @@
 import { createHostComponent } from "../internal/createHostComponent.ts";
 import { getHostApi } from "../internal/host.ts";
-import type {ChannelComboBoxProps, ConfigurableInputProps, ManualRefreshButtonProps, ModuleConnectionStatusProps, ModuleInstanceConnectionProps, ModuleInstanceSelectProps, ModuleRuntimeOverviewProps, TaskBindingTableProps} from "./types.ts";
+import type {ChannelComboBoxProps, ComboboxSearchProps, ConfigurableInputProps, ManualRefreshButtonProps, ModuleConnectionStatusProps, ModuleInstanceConnectionProps, ModuleInstanceSelectProps, ModuleRuntimeOverviewProps, TaskBindingTableProps} from "./types.ts";
 
 /** Selects a DARTWIC channel and, optionally, one of its fields. @dartwic-reference @category DARTWIC UI Components */
 export const ChannelComboBox = createHostComponent<ChannelComboBoxProps>("ChannelComboBox", (hostApi) => hostApi.helpers.ChannelComboBox);
+/** Searches a fixed option list using DARTWIC's standard host-owned combobox. @dartwic-reference @category DARTWIC UI Components */
+export const ComboboxSearch = createHostComponent<ComboboxSearchProps>("ComboboxSearch", (hostApi) => hostApi.helpers.ComboboxSearch);
 /** Edits a configurable literal, channel reference, or expression value. @dartwic-reference @category DARTWIC UI Components */
 export const ConfigurableInput = createHostComponent<ConfigurableInputProps>("ConfigurableInput", (hostApi) => hostApi.helpers.ConfigurableInput);
 /** Renders the standard refresh icon button with an in-progress state. @dartwic-reference @category DARTWIC UI Components */
@@ -79,4 +81,4 @@ export const buildParameterDisplayNodeDefinitionFromChannel = (channel: unknown,
 /** Normalize a legacy channel and field reference using host rules. @dartwic-reference @category DARTWIC UI Components */
 export const normalizeLegacyChannelFieldReference = (value: string, field?: string | null) => callHelper("normalizeLegacyChannelFieldReference", [value, field]);
 
-export type {ChannelComboBoxProps, ConfigurableInputProps, ManualRefreshButtonProps, ModuleConnectionStatusProps, ModuleInstanceConnectionProps, ModuleInstanceSelectProps, ModuleRuntimeChannel, ModuleRuntimeOverviewProps, TaskBinding, TaskBindingTableProps} from "./types.ts";
+export type {ChannelComboBoxProps, ComboboxSearchItem, ComboboxSearchProps, ConfigurableInputProps, ManualRefreshButtonProps, ModuleConnectionStatusProps, ModuleInstanceConnectionProps, ModuleInstanceSelectProps, ModuleRuntimeChannel, ModuleRuntimeOverviewProps, TaskBinding, TaskBindingTableProps} from "./types.ts";

@@ -1,9 +1,9 @@
 import {definePlugin} from "../sdk/index.ts";
-import {ExampleModuleConfig} from "./moduleConfigs.jsx";
+import {ExampleModuleConfig, RocketModuleConfig} from "./moduleConfigs.jsx";
 import {ExamplePluginSettings} from "./pluginSettings.jsx";
 import {ExampleResource, ExampleSchematicNode} from "./resourcesAndSchematics.jsx";
 import {ExampleTaskCard} from "./taskCards.jsx";
-import {ExampleTaskConfig, taskConfigs} from "./taskConfigs.jsx";
+import {ExampleTaskConfig, taskConfigs, RocketDriverTaskConfig} from "./taskConfigs.jsx";
 import React from "../sdk/react.ts";
 
 function ExampleDeviceIcon(props) {
@@ -28,6 +28,10 @@ export default definePlugin({
     id: "example_device_plugin",
     name: "Example Device Plugin",
     register(registry) {
+        for (const id of ["rocket_read", "rocket_write"]) registry.addTaskUi({
+            id, name: id === "rocket_read" ? "Mock Rocket Read" : "Mock Rocket Write", editor: RocketDriverTaskConfig,
+        });
+        registry.addModuleUi({id: "rocket_sim", name: "Mock Rocket Device", icon: ExampleDeviceIcon, panel: RocketModuleConfig});
         registry.addTaskUi({
             id: "example_task",
             name: "Example Task UI",
