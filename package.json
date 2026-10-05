@@ -1,7 +1,7 @@
 {
   "name": "dartwic-example-device-plugin",
   "private": true,
-  "version": "2.0.0-beta.2",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
     "test": "node --test scripts/settings.test.mjs",

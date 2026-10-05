@@ -15,8 +15,8 @@ opened. This is operator metadata; it does not change the simulated device.
 
 The matching [example workspace](https://github.com/kemptonburton/dartwic-example-workspace)
 contains that workspace override and a Model3D schematic that references a shared
-model asset. These examples use the updated storage-enabled development host;
-the original public Engine/Interface beta.3 downloads predate the new settings API.
+model asset. These examples require DARTWIC Engine and Interface 2.0.0 or newer.
+Core 2.0.0 packages will be published separately from the plugin release.
 
 Start with one question: **should another computer get this file when it clones the workspace?**
 
