@@ -183,7 +183,7 @@ export function RocketDriverTaskConfig({task, operation, onSaved, onClose, taskE
             </Select>},
         {key: "channel", label: isRead ? "STATE CHANNEL (OUTPUT)" : "STATE CHANNEL (INPUT)", width: "minmax(17rem,1.4fr)",
             render: (row, index, update) => <ChannelComboBox mode={isRead ? "write" : "read"} showFieldSelector={false}
-                overrideValue={row.channel} placeholder="SELECT STATE CHANNEL"
+                initialValue={row.channel} overrideValue={row.channel} placeholder="SELECT STATE CHANNEL"
                 onSelect={value => update({...row, channel: convertChannelReferenceToChannelName(value)})} />}
     ];
     useTaskConfigBridge(taskEditor, {
