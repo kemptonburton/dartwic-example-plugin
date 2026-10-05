@@ -60,7 +60,14 @@ Build output is `ui/index.js`. The live registry supplies installed-plugin contr
 
 Schematic node renderers and configuration UI are interface-owned. Place engine-readable palette JSON beneath `files/workspace/global_data/schematic_nodes/...`; installation mirrors it into the engine configuration root.
 
-Public entrypoints include the main registry types, `tasks`, `resources`, `plugin-settings`, `module-configs`, `schematic-nodes`, `hooks`, `ui`, `utils`, `runtime`, `react`, and the Tailwind preset.
+Public entrypoints include the main registry types, `assets`, `storage`, `tasks`, `resources`, `plugin-settings`, `module-configs`, `schematic-nodes`, `hooks`, `ui`, `utils`, `runtime`, `react`, and the Tailwind preset.
+
+`createStorageClient(operation)` from `@dartwic/interface-sdk/storage` provides
+named-root file references, JSON helpers and workspace/project settings overrides.
+See the hand-written [Storage and Settings guide](../../docs/Website/docs/Plugins/Storage%20and%20Settings.md)
+for location scopes, inheritance/reset examples, private module files and the 3D asset pattern.
+
+`createWorkspaceAssetClient(operation)` from `@dartwic/interface-sdk/assets` reads and saves reusable text/JSON packages beneath `workspace/global_data/assets/<namespace>/<filename>`. Media and 3D nodes use this same store. Use your plugin ID as the namespace, and keep portable references in configuration. See [Workspace Assets](../../docs/Design/99%20-%20Development%20Guides/Workspace%20Assets.md) for interface and engine examples, binary packaging, access rules and legacy compatibility.
 
 ## Stable resource identities
 

@@ -10,6 +10,8 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "exports": {
+    "./storage": "./storage/index.ts",
+    "./assets": "./assets/index.ts",
     ".": "./index.ts",
     "./hooks": "./hooks/index.ts",
     "./markdown": "./markdown/index.ts",

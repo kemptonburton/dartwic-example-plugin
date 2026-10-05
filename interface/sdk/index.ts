@@ -15,6 +15,8 @@ import type {
     ValueFormatDefinition,
 } from "./types/index.ts";
 export {createNotificationClient} from "./notifications/index.ts";
+export {createStorageClient, installationPath, instancePath, workspacePath, projectPath, projectSettingsPath, projectRuntimePath, projectCachePath} from './storage/index.ts';
+export {createWorkspaceAssetClient, workspaceAssetPath, WORKSPACE_ASSET_ROOT} from './assets/index.ts';
 export type {NotificationSeverity, SettingsDestination, LocalNotification, SettingsIssue, LocalNotificationClient} from "./notifications/index.ts";
 
 const EMPTY_CONTRIBUTIONS = (): InterfaceContributions => ({

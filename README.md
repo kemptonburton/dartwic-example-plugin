@@ -8,7 +8,15 @@ Engine registration happens in `ExampleDevicePlugin::onPluginLoaded()` through `
 
 The interface uses `definePlugin({register})`. `addModuleUi` demonstrates both a React icon and a module configuration panel. The module config falls back to `workspace/global_data/plugin_icons/example-device.svg`, which is supplied through `files/`.
 
-Place every plugin-authored engine-root file under `files/`. This example includes a schematic-node JSON file at `files/workspace/global_data/schematic_nodes/device_examples/example_indicator.json`; packaging includes that tree and installation or local deployment mirrors it below the engine configuration root.
+Place portable plugin-supplied workspace content under `files/workspace/`. This example includes a schematic-node JSON file at `files/workspace/global_data/schematic_nodes/device_examples/example_indicator.json`; installation copies that content into the selected workspace. Do not put mutable settings, credentials, runtime output, or caches in the installed plugin directory.
+
+See [Storage and settings](docs/storage-and-settings.md) for the five location scopes, layered plugin/module settings, and shared asset examples. The bundled storage helpers target the updated storage-enabled host. The original public Engine/Interface beta.3 downloads do not provide the new settings operations; use an updated development host for those examples. The rocket driver itself does not call the new SDK virtual methods.
+
+`interface/src/settings.mjs` is a working example: the settings panel saves
+`plugins.example_device_plugin.operator.run_label` at workspace or project scope,
+preserves the opaque revision, and resets only that JSON pointer. The Example
+Notes resource displays the effective run label when opened. `npm test` checks
+the storage calls, validation, reset behavior, and host-error propagation.
 
 ## Setup
 
@@ -38,6 +46,6 @@ Deployment is optional and never assumes a DARTWIC source checkout. Set `DARTWIC
 
 `rocket_sim` models one shared device. `rocket_read` publishes measured values and applied outputs; `rocket_write` reads coil/igniter commands. `rocket_device_discovery` demonstrates the Modbus-style module-discovery UI contract with a simulated endpoint and presence lease. The small `example_device` driver stays available as an introductory example.
 
-The [example workspace](https://github.com/kemptonburton/dartwic-example-workspace) is the matching, independently cloneable demo and the `workspaces/dartwic-example-workspace` submodule in DARTWIC. Add its `example-workspace/` folder in the Interface; the sibling `flight-computer/`, `tools/`, and `walkthroughs/` folders are source and operating aids. It has eleven operational walkthroughs, Lua DCode, YAML templates, and the rocket model asset. `rocket_read` and `rocket_write` expose direct device-field/state-channel binding tables. Engine/Interface 2.0.0-beta.3 are the tested minimum; its seven tasks require a suitable license.
+The [example workspace](https://github.com/kemptonburton/dartwic-example-workspace) is the matching, independently cloneable demo and the `workspaces/dartwic-example-workspace` submodule in DARTWIC. Add its `example-workspace/` folder in the Interface; the sibling `flight-computer/`, `tools/`, and `walkthroughs/` folders are source and operating aids. It has eleven operational walkthroughs, Lua DCode, YAML templates, and the rocket model asset. `rocket_read` and `rocket_write` expose direct device-field/state-channel binding tables. Workspace beta.2 uses the updated storage-enabled development host, not the original public beta.3 downloads; its seven tasks require a suitable license.
 
 The three `vendor/` source snapshots are part of `sdk-lock.json`. CMake consumes those bundled dependencies, so building the plugin and flight peer does not need the private monorepo.

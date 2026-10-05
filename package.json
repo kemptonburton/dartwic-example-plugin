@@ -1,9 +1,10 @@
 {
   "name": "dartwic-example-device-plugin",
   "private": true,
-  "version": "2.0.0-beta.1",
+  "version": "2.0.0-beta.2",
   "type": "module",
   "scripts": {
+    "test": "node --test scripts/settings.test.mjs",
     "build": "node build.mjs",
     "build:interface": "node build.mjs",
     "verify": "node ./scripts/plugin-verify.mjs --source-only",
