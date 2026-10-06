@@ -3,7 +3,7 @@
   "name": "Example Device Plugin",
   "description": "A complete DARTWIC 2.0 engine and interface plugin example.",
   "author": "Kempton Burton",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "minEngineVersion": "2.0.0",
   "minInterfaceVersion": "2.0.0",
   "contains_engine_plugin": true,

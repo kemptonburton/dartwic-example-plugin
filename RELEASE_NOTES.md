@@ -1,4 +1,10 @@
-# Example Plugin 2.0.0
+# Example Plugin 2.0.1
+
+- Windows packages include both Release (`plugin/engine/`) and Debug (`plugin/engine-debug/`) binaries, so development Debug Engines can install the example too.
+- The installer chooses the matching variant; Debug and Release C++ runtimes are not interchangeable.
+- Engine and Interface minimum versions remain 2.0.0.
+
+## Example Plugin 2.0.0
 
 - Stable release for DARTWIC 2.0.0, with Engine and Interface minimums of 2.0.0.
 - Bundles the matching 2.0.0 SDK and Engine Protocol sources with verified snapshot hashes.
