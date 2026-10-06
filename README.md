@@ -12,11 +12,20 @@ Place portable plugin-supplied workspace content under `files/workspace/`. This 
 
 See [Storage and settings](docs/storage-and-settings.md) for the five location scopes, layered plugin/module settings, and shared asset examples. This release requires DARTWIC Engine and Interface 2.0.0 or newer. Core 2.0.0 packages will be published separately. The rocket driver itself does not call the new SDK virtual methods.
 
-`interface/src/settings.mjs` is a working example: the settings panel saves
-`plugins.example_device_plugin.operator.run_label` at workspace or project scope,
-preserves the opaque revision, and resets only that JSON pointer. The Example
-Notes resource displays the effective run label when opened. `npm test` checks
-the storage calls, validation, reset behavior, and host-error propagation.
+The settings panel demonstrates **Decimal places** and **Show units** with a
+sample telemetry preview. It saves changed fields automatically after 500 ms
+through `createStorageClient`, with no Save button or location selector.
+`interface/src/settings.mjs` handles defaults, validation, and project-scoped
+storage; `settingsAutosave.mjs` coalesces field patches and serializes writes;
+`useDisplaySettings.jsx` connects that queue to React and notifications. The
+Example Telemetry resource reads the effective formatting when opened. These
+settings format sample values, not device acquisition or control.
+
+Pending edits flush when the panel closes. Each session captures its project
+and uses the latest opaque revision, so a delayed write cannot target a new
+project or silently overwrite a teammate's changes. Failed writes stay visibly
+unsaved; Reload settings discards the draft and rereads the host. `npm test`
+covers debounce, concurrent edits, project capture, validation, and recovery.
 
 ## Setup
 
@@ -28,7 +37,7 @@ npm ci
 
 `npm run build` and `npm run verify` need only Node.js. Native Engine builds additionally require CMake, a supported C++ toolchain, and a vcpkg checkout containing the dependencies in `vcpkg.json`. Set `VCPKG_ROOT` to that checkout before running packaging or deployment commands.
 
-`npm run package` creates `plugin.zip` with `engine/`, `interface/`, and optional `files/`. `npm run package-debug` creates `plugin-debug.zip` with `engine-debug/`, `interface/`, and optional `files/`. Windows releases can attach `plugin.zip`, the mock rocket workspace, and `rocket-flight-peer-windows-x64.zip`. These binary packages let operators run the examples without a C++ toolchain.
+`npm run package` creates `plugin.zip` with both `engine/` and `engine-debug/`, `interface/`, and optional `files/`. `npm run package-debug` creates `plugin-debug.zip` with `engine-debug/`, `interface/`, and optional `files/`. Windows releases can attach `plugin.zip`, the mock rocket workspace, and `rocket-flight-peer-windows-x64.zip`. These binary packages let operators run the examples without a C++ toolchain.
 
 Commands:
 

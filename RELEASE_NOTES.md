@@ -1,4 +1,13 @@
-# Example Plugin 2.0.1
+# Example Plugin 2.0.2
+
+- Replaced run labels and the location selector with decimal precision and unit display settings, plus a sample telemetry preview.
+- Project overrides autosave after 500 ms through the storage helpers; there is no Save button.
+- Field patches merge, writes serialize, revisions protect concurrent edits, and closing the panel flushes accepted changes to the captured project.
+- Validation and unsaved errors remain visible, including SDK notifications after the panel closes.
+- Added thirteen tests and a handwritten autosave walkthrough in the storage/settings guide.
+- Engine and Interface minimum versions remain 2.0.0; both Windows binary variants are included.
+
+## Example Plugin 2.0.1
 
 - Windows packages include both Release (`plugin/engine/`) and Debug (`plugin/engine-debug/`) binaries, so development Debug Engines can install the example too.
 - The installer chooses the matching variant; Debug and Release C++ runtimes are not interchangeable.

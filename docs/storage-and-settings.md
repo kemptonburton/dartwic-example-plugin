@@ -7,14 +7,15 @@ created: 2026-10-05T15:38
 # Storage and Settings
 
 The public [example plugin](https://github.com/kemptonburton/dartwic-example-plugin)
-includes a working run-label setting in `interface/src/settings.mjs` and its
-settings panel. Save it at workspace scope to share it across projects, or at
-project scope to label one test setup. Resetting the project override reveals the
-workspace value again. The Example Notes resource reads the effective label when
-opened. This is operator metadata; it does not change the simulated device.
+includes a working autosaved settings panel: **Decimal places** controls numeric
+precision and **Show units** controls unit suffixes. Both affect the sample
+telemetry preview and the Example Telemetry resource when it opens. They do not
+change device sampling or commands. There is no Save button or location selector:
+the plugin chooses project scope because this example configures a shared
+project resource, not the operator's personal Interface preferences.
 
 The matching [example workspace](https://github.com/kemptonburton/dartwic-example-workspace)
-contains that workspace override and a Model3D schematic that references a shared
+contains workspace formatting defaults and a Model3D schematic that references a shared
 model asset. These examples require DARTWIC Engine and Interface 2.0.0 or newer.
 Core 2.0.0 packages will be published separately from the plugin release.
 
@@ -157,6 +158,90 @@ api.resetSettingsOverride("project", Json::array({
 ```
 
 The host overlays `plugins.<plugin_id>` on the configuration passed to the plugin factory when loading it. That does not rewrite the installed `plugin.json`. A running plugin must explicitly reread settings and safely apply changes, or require an engine restart. Do not read files or parse JSON in a high-frequency task loop.
+
+## Build an autosaved settings panel
+
+The example plugin uses three small layers, all in its public source:
+
+| File | Responsibility |
+| --- | --- |
+| `interface/src/settings.mjs` | Defaults, field validation, project capture, storage helper calls |
+| `interface/src/settingsAutosave.mjs` | Debounce and a serialized queue of changed fields |
+| `interface/src/useDisplaySettings.jsx` | React lifecycle, revision tracking, save state, and SDK notifications |
+
+The sample settings are stored below your plugin ID:
+
+```json
+{
+  "plugins": {
+    "example_device_plugin": {
+      "display": {"decimal_places": 3, "show_units": true}
+    }
+  }
+}
+```
+
+The code default is two decimal places. The example workspace intentionally
+sets three in `global_data/settings.json`. Changing the panel to four writes
+only `decimal_places: 4` in the selected project's `settings.json`. It does
+not copy `show_units` or unrelated effective settings into that override.
+There is no plugin-specific settings file, localStorage copy, or manually built
+absolute path. Resetting the two project pointers with
+`resetSettingsOverride('project', pointers, {project, revision})` reveals the
+workspace values again.
+
+Capture the active project before loading settings or scheduling writes. The
+example reads `active_project_name` through `dartwic/engine/get-config`, then
+passes that same name into every storage helper call. A delayed save remains
+attached to that session even if the active project changes.
+
+The important persistence pattern is:
+
+```js
+const storage = createStorageClient(operation);
+const initial = await storage.readEffectiveSettings(defaults, project);
+let revision = initial.revision;
+
+// createSettingsAutosave is example-plugin code, not a public SDK export.
+const autosave = createSettingsAutosave(async changedFields => {
+    const saved = await storage.writeSettingsOverride('project', {
+        plugins: {example_device_plugin: {display: changedFields}},
+    }, {project, revision});
+    revision = saved.revision;
+});
+
+// A control updates its draft immediately and queues only its changed field.
+autosave.edit({decimal_places: 4});
+autosave.edit({show_units: false});
+// Flush on blur or panel cleanup; there is no Save button.
+await autosave.flush();
+```
+
+The queue waits 500 ms after the last edit. Several edits merge into one patch;
+changing the same field repeatedly keeps its newest value. A write that is
+already running finishes before another starts. The next write uses the
+revision returned by the previous one. Save responses must not replace the
+current React draft: the user may have typed again while that request was in
+flight. Write responses omit code defaults, so the example's display reader
+fills missing known fields from its defaults while preserving `0` and `false`.
+
+Validate before queuing. Decimal places must be an integer from zero to six;
+show-units must be a boolean. An empty or out-of-range numeric draft stays in the
+input with an error and removes only its queued precision field. A valid queued
+toggle is still saved. Do not turn an empty input into zero with `Number('')`.
+
+The panel shows Pending, Saving, Saved, or Not saved. A failed patch stays
+pending, and the SDK notification client reports the failure even if the panel
+has closed. A revision conflict is not silently retried with a fresh token:
+Reload settings deliberately discards the unsaved draft and reads the host's
+current values. A disconnect or permission failure is also an error, not a
+successful save.
+
+Use this pattern for low-frequency configuration: display formatting for a
+shared resource, a plugin's discovery interval, or a default timeout. Module
+sample rates and channel bindings usually belong in module resources instead.
+Device commands must use their command operation, not a debounced settings
+write. Personal themes and editor preferences stay in Interface storage.
 
 ## Module settings are usually project resources
 

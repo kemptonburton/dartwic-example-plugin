@@ -1,25 +1,27 @@
 import React from "../sdk/react.ts";
 import {useDartwic} from "../sdk/hooks/index.ts";
-import {exampleSettings, runLabel} from "./settings.mjs";
+import {displayDefaults, displaySettings, openExampleSettings} from "./settings.mjs";
+import {TelemetryPreview} from "./pluginSettings.jsx";
 
 export function ExampleResource({setIsLoaded}) {
     const {operation} = useDartwic();
-    const [label, setLabel] = React.useState("Mock Rocket Test");
+    const [settings, setSettings] = React.useState(displayDefaults);
     const [error, setError] = React.useState("");
     React.useEffect(() => {
         setIsLoaded?.(true);
     }, [setIsLoaded]);
     React.useEffect(() => {
         let active = true;
-        exampleSettings(operation).read().then(snapshot => {
-            if (active) { setLabel(runLabel(snapshot)); setError(""); }
+        openExampleSettings(operation).then(({snapshot}) => {
+            if (active) { setSettings(displaySettings(snapshot)); setError(""); }
         }).catch(caught => { if (active) setError(caught.message); });
         return () => { active = false; };
     }, [operation]);
 
     return (
         <div className="p-4 text-sm text-muted-foreground">
-            <h2 className="text-sm font-medium text-foreground">{label}</h2>
+            <h2 className="mb-3 text-sm font-medium text-foreground">Sample telemetry</h2>
+            <TelemetryPreview settings={settings}/>
             {error ? <div role="alert" className="mt-2 text-red">{error}</div> : null}
         </div>
     );

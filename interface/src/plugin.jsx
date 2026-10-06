@@ -56,8 +56,8 @@ export default definePlugin({
         });
         registry.addResource({
             id: "example_notes",
-            name: "Example Notes",
-            label: "Example Notes",
+            name: "Example Telemetry",
+            label: "Example Telemetry",
             type: "component",
             icon: ExampleNotesIcon,
             component: ExampleResource,
