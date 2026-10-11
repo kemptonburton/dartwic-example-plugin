@@ -4,6 +4,8 @@
 #include <tempest/Peer.h>
 #include <sdk/notifications/NotificationMuteHandle.h>
 #include <array>
+#include <algorithm>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -326,6 +328,44 @@ namespace Example {
             }
         );
 
+        DARTWIC::API::DCodeFunctionArgument sample_element{
+            "item", "number", "One numeric sample.", true};
+        DARTWIC::API::DCodeFunctionArgument samples_argument{
+            "samples", "list", "Three measurements to analyze.", true};
+        samples_argument.list_length = 3;
+        samples_argument.element = std::make_shared<DARTWIC::API::DCodeFunctionArgument>(sample_element);
+        dartwic->registerDCodeFunction(
+            "analyze_samples", "Analyze Samples",
+            [](const nlohmann::json& payload) {
+                const auto& samples = payload.at("samples");
+                double sum = 0.0;
+                double maximum = -std::numeric_limits<double>::infinity();
+                for (const auto& sample : samples) {
+                    const double value = sample.get<double>();
+                    sum += value;
+                    maximum = std::max(maximum, value);
+                }
+                return nlohmann::json{{"sum", sum}, {"maximum", maximum}};
+            },
+            "Return the sum and maximum of three samples.",
+            {samples_argument},
+            {{"sum", "number", "Sample sum.", true},
+             {"maximum", "number", "Largest sample.", true}},
+            [](const DARTWIC::API::DCodePreparedValueView& input,
+                DARTWIC::API::DCodePreparedMutableValue& result) {
+                const auto& samples = input.field("samples");
+                double sum = 0.0;
+                double maximum = -std::numeric_limits<double>::infinity();
+                for (const auto& sample : samples.elements) {
+                    const double value = sample.asNumber();
+                    sum += value;
+                    maximum = std::max(maximum, value);
+                }
+                result.field("sum").setNumber(sum);
+                result.field("maximum").setNumber(maximum);
+            }
+        );
+
         dartwic->registerTelemetry(DARTWIC::API::TelemetryDefinition{
             .id = "echoed",
             .name = "Echoed payload",
@@ -366,6 +406,10 @@ namespace Example {
 
         return new ExampleDeviceModule(cfg, api);
     }
+}
+
+DARTWIC_PLUGIN_EXPORT uint32_t dartwicEngineSdkAbiVersion() noexcept {
+    return DARTWIC::Plugins::ENGINE_PLUGIN_SDK_ABI_VERSION;
 }
 
 DARTWIC_PLUGIN_EXPORT DARTWIC::Plugins::BasePlugin* createPlugin(

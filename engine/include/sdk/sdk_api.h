@@ -14,6 +14,7 @@
 #include <variant>
 #include <vector>
 #include "channel_references.h"
+#include "dcode_prepared_value.h"
 
 namespace TEMPEST { class Transport; class Peer; }
 
@@ -213,6 +214,8 @@ namespace DARTWIC::API {
      * @category DCode
      */
     using DCodeFunctionHandler = std::function<nlohmann::json(const nlohmann::json& payload)>;
+    using DCodePreparedFunctionHandler = std::function<void(
+        const DCodePreparedValueView& input, DCodePreparedMutableValue& result)>;
 
     /**
      * Describes one input or output in a plugin-provided DCode function.
@@ -225,6 +228,9 @@ namespace DARTWIC::API {
         std::string type;
         std::string doc;
         bool required = false;
+        std::optional<size_t> list_length;
+        std::shared_ptr<DCodeFunctionArgument> element;
+        std::vector<DCodeFunctionArgument> fields;
     };
 
     struct TaskTypeDefinition;
@@ -563,15 +569,16 @@ namespace DARTWIC::API {
             throw std::runtime_error("TEMPEST telemetry is unavailable in this SDK host.");
         }
         /**
-         * Registers a native DCode function together with its editor-facing argument documentation.
+         * Registers one DCode function schema and its ordinary and optional prepared handlers.
          * @dartwic-reference
          * @category DCode
          * @param local_id Identifier unique within the plugin.
          * @param name Operator-facing function name.
          * @param handler JSON function callback.
          * @param doc Function documentation shown by DCode tooling.
-         * @param input_arguments Structured input documentation.
-         * @param output_arguments Structured output documentation.
+         * @param input_arguments Validated input schema, including fixed list lengths and dictionary fields when prepared.
+         * @param output_arguments Validated result schema with the same shape rules.
+         * @param prepared_handler Optional synchronous typed handler; its input views and result writer live only for the call.
          * @returns The plugin-qualified DCode function identifier.
          */
         virtual std::string registerDCodeFunction(
@@ -580,7 +587,8 @@ namespace DARTWIC::API {
             DCodeFunctionHandler handler,
             std::string doc = {},
             std::vector<DCodeFunctionArgument> input_arguments = {},
-            std::vector<DCodeFunctionArgument> output_arguments = {}
+            std::vector<DCodeFunctionArgument> output_arguments = {},
+            DCodePreparedFunctionHandler prepared_handler = {}
         ) = 0;
         /**
          * Registers a CAESAR-controlled plugin loop and returns its qualified identifier.
