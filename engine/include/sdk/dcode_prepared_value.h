@@ -8,8 +8,8 @@
 
 namespace DARTWIC::API {
 
-// A call-scoped view of a DCode value. Plugins must not retain these pointers
-// or spans after their registered handler returns.
+// A call-scoped mutable view of a fixed-shape DCode value. Plugins must not
+// retain these pointers or spans after their registered handler returns.
 enum class DCodePreparedKind : uint8_t { Null, Boolean, Number, String, List, Dictionary };
 struct DCodePreparedFieldView;
 struct DCodePreparedMutableField;
@@ -19,11 +19,11 @@ struct DCodePreparedValueView {
     bool boolean{false};
     double number{0.0};
     std::string_view text;
-    std::span<const DCodePreparedValueView> elements;
-    std::span<const DCodePreparedFieldView> fields;
+    std::span<DCodePreparedValueView> elements;
+    std::span<DCodePreparedFieldView> fields;
 
-    const DCodePreparedValueView& field(std::string_view name) const;
-    const DCodePreparedValueView& at(size_t index) const {
+    DCodePreparedValueView& field(std::string_view name);
+    DCodePreparedValueView& at(size_t index) {
         if (kind != DCodePreparedKind::List || index >= elements.size())
             throw std::out_of_range("Prepared DCode list index is invalid.");
         return elements[index];
@@ -33,14 +33,24 @@ struct DCodePreparedValueView {
             throw std::invalid_argument("Prepared DCode value is not a number.");
         return number;
     }
+    void setNumber(double value) {
+        if (kind != DCodePreparedKind::Number)
+            throw std::invalid_argument("Prepared DCode argument is not a number.");
+        number = value;
+    }
+    void setBoolean(bool value) {
+        if (kind != DCodePreparedKind::Boolean)
+            throw std::invalid_argument("Prepared DCode argument is not a boolean.");
+        boolean = value;
+    }
 };
 
 struct DCodePreparedFieldView {
     std::string_view name;
-    const DCodePreparedValueView* value{nullptr};
+    DCodePreparedValueView* value{nullptr};
 };
 
-inline const DCodePreparedValueView& DCodePreparedValueView::field(std::string_view name) const {
+inline DCodePreparedValueView& DCodePreparedValueView::field(std::string_view name) {
     if (kind != DCodePreparedKind::Dictionary)
         throw std::invalid_argument("Prepared DCode value is not a dictionary.");
     for (const auto& entry : fields)

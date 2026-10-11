@@ -336,8 +336,8 @@ namespace Example {
         samples_argument.element = std::make_shared<DARTWIC::API::DCodeFunctionArgument>(sample_element);
         dartwic->registerDCodeFunction(
             "analyze_samples", "Analyze Samples",
-            [](const nlohmann::json& payload) {
-                const auto& samples = payload.at("samples");
+            [](nlohmann::json& payload) {
+                auto& samples = payload.at("samples");
                 double sum = 0.0;
                 double maximum = -std::numeric_limits<double>::infinity();
                 for (const auto& sample : samples) {
@@ -345,15 +345,16 @@ namespace Example {
                     sum += value;
                     maximum = std::max(maximum, value);
                 }
+                samples[0] = samples.at(0).get<double>() + 10.0;
                 return nlohmann::json{{"sum", sum}, {"maximum", maximum}};
             },
             "Return the sum and maximum of three samples.",
             {samples_argument},
             {{"sum", "number", "Sample sum.", true},
              {"maximum", "number", "Largest sample.", true}},
-            [](const DARTWIC::API::DCodePreparedValueView& input,
+            [](DARTWIC::API::DCodePreparedValueView& input,
                 DARTWIC::API::DCodePreparedMutableValue& result) {
-                const auto& samples = input.field("samples");
+                auto& samples = input.field("samples");
                 double sum = 0.0;
                 double maximum = -std::numeric_limits<double>::infinity();
                 for (const auto& sample : samples.elements) {
@@ -363,6 +364,7 @@ namespace Example {
                 }
                 result.field("sum").setNumber(sum);
                 result.field("maximum").setNumber(maximum);
+                samples.at(0).setNumber(samples.at(0).asNumber() + 10.0);
             }
         );
 

@@ -213,9 +213,9 @@ namespace DARTWIC::API {
      * @dartwic-reference
      * @category DCode
      */
-    using DCodeFunctionHandler = std::function<nlohmann::json(const nlohmann::json& payload)>;
+    using DCodeFunctionHandler = std::function<nlohmann::json(nlohmann::json& payload)>;
     using DCodePreparedFunctionHandler = std::function<void(
-        const DCodePreparedValueView& input, DCodePreparedMutableValue& result)>;
+        DCodePreparedValueView& input, DCodePreparedMutableValue& result)>;
 
     /**
      * Describes one input or output in a plugin-provided DCode function.
@@ -228,6 +228,8 @@ namespace DARTWIC::API {
         std::string type;
         std::string doc;
         bool required = false;
+        // Fixed list size and named dictionary fields are used by prepared
+        // native calls; ordinary Lua values may still grow when unshaped.
         std::optional<size_t> list_length;
         std::shared_ptr<DCodeFunctionArgument> element;
         std::vector<DCodeFunctionArgument> fields;
@@ -574,11 +576,11 @@ namespace DARTWIC::API {
          * @category DCode
          * @param local_id Identifier unique within the plugin.
          * @param name Operator-facing function name.
-         * @param handler JSON function callback.
+         * @param handler Synchronous JSON callback. It may mutate fixed-shape argument values in place; DCode aliases observe those changes after return.
          * @param doc Function documentation shown by DCode tooling.
          * @param input_arguments Validated input schema, including fixed list lengths and dictionary fields when prepared.
          * @param output_arguments Validated result schema with the same shape rules.
-         * @param prepared_handler Optional synchronous typed handler; its input views and result writer live only for the call.
+         * @param prepared_handler Optional synchronous typed handler. Its mutable fixed-shape argument views and result writer live only for the call; changing argument kind or collection shape fails the call.
          * @returns The plugin-qualified DCode function identifier.
          */
         virtual std::string registerDCodeFunction(
