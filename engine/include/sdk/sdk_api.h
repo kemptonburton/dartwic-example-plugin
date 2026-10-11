@@ -124,31 +124,21 @@ namespace DARTWIC::API {
     };
 
     /**
-     * Stable, pre-resolved address of a fixed RAPID channel.
+     * Stable retained address of a fixed RAPID channel.
      *
-     * Handles are intentionally opaque to plugins. Resolve them during task setup and
-     * reuse them in high-frequency callbacks to avoid channel-name lookup overhead.
+     * Retain the returned handle in task instance state and reuse it in callbacks.
      * @dartwic-reference
      * @category Channels
      */
     struct FixedChannelHandle {
         uint32_t slot = 0;
         uint64_t binding_generation = 0;
+        std::shared_ptr<const std::string> channel;
+        const void* owner = nullptr;
 
-        [[nodiscard]] bool valid() const noexcept { return binding_generation != 0; }
-    };
-
-    /**
-     * Ordered channel names and handles used by the fixed-channel batch APIs.
-     * @dartwic-reference
-     * @category Channels
-     */
-    struct FixedChannelBatch {
-        std::vector<std::string> channels;
-        std::vector<FixedChannelHandle> handles;
-
-        [[nodiscard]] size_t size() const noexcept { return handles.size(); }
-        [[nodiscard]] bool empty() const noexcept { return handles.empty(); }
+        [[nodiscard]] bool valid() const noexcept {
+            return binding_generation != 0 && channel && owner;
+        }
     };
 
     /**
@@ -278,9 +268,9 @@ namespace DARTWIC::API {
         virtual void clearRuntimeContext() = 0;
         // Keep new virtual functions appended so plugins built against the previous
         // TaskRuntime vtable retain the indices of all existing functions.
-        /** Declares this task's fixed snapshot inputs from on_configure. Every declared name
+        /** Declares this task's fixed inputs from on_configure. Every declared name
          * must refer to fixed storage when configuration completes; missing/dynamic inputs
-         * fail task preparation. An empty list requests an empty fixed input snapshot.
+         * fail task preparation. Values are read at each executing call site.
          * Calls from other callbacks throw rather than changing an active plan. */
         virtual void setFixedInputChannels(std::vector<std::string> channels) = 0;
 
@@ -471,17 +461,42 @@ namespace DARTWIC::API {
          * Creates a channel in fixed RAPID storage, or promotes an existing dynamic channel.
          *
          * Call during startup configuration or a task's on_configure callback. The engine's
-         * declared configuration transaction permits layout updates after active task snapshots
+         * declared configuration transaction permits layout updates after active task execution
          * drain, even when the layout is sealed. Direct layout changes outside that boundary
-         * remain restricted. This writes initial_value; ordinary subsequent field writes
-         * preserve fixed storage. Do not recreate the channel in every acquisition callback.
+         * remain restricted. Initial value applies only to a new channel; existing fixed
+         * values and promoted dynamic state are preserved. Retain the returned handle.
          *
          * @dartwic-reference
          * @category Channels
          * @param channel Flat channel name.
          * @param initial_value Initial numeric value; defaults to zero.
          */
-        void createFixedChannel(const std::string& channel, double initial_value = 0.0);
+        virtual FixedChannelHandle createFixedChannel(const std::string& channel,
+            double initial_value = 0.0) = 0;
+
+        /**
+         * Reads the current numeric value from a retained local fixed-channel handle.
+         * A retired handle fails instead of resolving its old name.
+         * @dartwic-reference
+         * @category Channels
+         * @param handle Handle returned by createFixedChannel.
+         * @param default_value Value used when no stored value is available.
+         */
+        virtual double queryChannel(const FixedChannelHandle& handle,
+            double default_value = 0.0) = 0;
+
+        /**
+         * Attempts an immediate numeric write without claiming authority.
+         * A retired handle fails instead of creating a replacement channel.
+         * @dartwic-reference
+         * @category Channels
+         * @param handle Handle returned by createFixedChannel.
+         * @param value Numeric value to write.
+         * @param timestamp Optional Unix-epoch nanosecond timestamp.
+         * @returns Whether the owner accepted the write.
+         */
+        virtual bool upsertChannel(const FixedChannelHandle& handle, double value,
+            std::optional<uint64_t> timestamp = std::nullopt) = 0;
 
         /**
          * Removes a channel and its associated field data.
@@ -612,6 +627,7 @@ namespace DARTWIC::API {
          * @param tags Searchable event tags.
          * @param resolution Suggested operator resolution.
          * @param auto_acknowledge Non-zero to acknowledge automatically.
+         * @param separation_seconds Required finite nonnegative quiet interval; zero requires explicit stop.
          * @returns The created ARGUS event identifier.
          */
         virtual int consoleError(
@@ -619,7 +635,8 @@ namespace DARTWIC::API {
             std::string message_description,
             std::vector<std::string> tags,
             std::string resolution,
-            int auto_acknowledge = 0
+            int auto_acknowledge,
+            double separation_seconds
         ) = 0;
 
         /**
@@ -721,51 +738,6 @@ namespace DARTWIC::API {
             (void)status;
             return false;
         }
-
-        /**
-         * Resolves fixed channels during configuration to avoid repeated name lookup in callbacks.
-         * This does not make the complete callback, write wrapper, or commit allocation-free.
-         * Throws when a name is missing or does not refer to fixed storage.
-         * @dartwic-reference
-         * @category Channels
-         * @param channels Ordered fixed-channel names to resolve.
-         */
-        virtual FixedChannelBatch resolveFixedChannels(const std::vector<std::string>& channels) = 0;
-
-        /**
-         * Reads a coherent task-input snapshot into caller-owned storage.
-         *
-         * Declare these inputs with TaskRuntime::setFixedInputChannels during configuration.
-         * Outside a task snapshot, reads observe live values instead. Undeclared inputs in an
-         * ordinary partial snapshot also use live fallback, so declare every fixed input.
-         * Re-resolve after configuration changes; stale handles return the supplied fallback.
-         * @dartwic-reference
-         * @category Channels
-         * @param batch Previously resolved fixed-channel batch.
-         * @param destination Caller-owned output span with one element per channel.
-         * @param default_value Value used when a fixed-channel value is unavailable.
-         */
-        virtual void queryFixedChannelValues(const FixedChannelBatch& batch,
-            std::span<double> destination,
-            double default_value = 0.0) = 0;
-
-        /**
-         * Stages one value per fixed channel in the current task transaction.
-         *
-         * Preserves ordinary command-authority checks. This does not claim channel ownership.
-         * Outside a task transaction, values are written immediately through the ordinary
-         * path; the call alone does not establish a coherent multi-channel transaction.
-         * Reuse the batch and value buffer. Staging, attribution, commit, inline reactions,
-         * and recording still have costs beyond resolved-handle access.
-         * @dartwic-reference
-         * @category Channels
-         * @param batch Previously resolved fixed-channel batch.
-         * @param values Input span with one value per channel.
-         * @param timestamp Optional Unix-epoch timestamp in nanoseconds.
-         */
-        virtual void upsertFixedChannelValues(const FixedChannelBatch& batch,
-            std::span<const double> values,
-            std::optional<uint64_t> timestamp = std::nullopt) = 0;
 
         /**
          * Opens or updates a named interface workflow without blocking the plugin loop.
@@ -972,14 +944,6 @@ namespace DARTWIC::API {
 
     };
 
-    inline void SDK_API::createFixedChannel(const std::string& channel, double initial_value) {
-        upsertChannelField(
-            channel,
-            ChannelField::VALUE,
-            ChannelValue{initial_value},
-            ChannelStorage::Fixed
-        );
-    }
 }
 
 #endif //SDK_API_H

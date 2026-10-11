@@ -14,7 +14,7 @@
 #endif
 
 namespace DARTWIC::Plugins {
-    inline constexpr uint32_t ENGINE_PLUGIN_SDK_ABI_VERSION = 3;
+    inline constexpr uint32_t ENGINE_PLUGIN_SDK_ABI_VERSION = 5;
     /**
      * Root object implemented by an engine plugin.
      *
