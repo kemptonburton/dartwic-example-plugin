@@ -6,11 +6,13 @@ Developers edit `plugin.json`, `engine/include`, `engine/src`, `interface/src`, 
 
 Engine registration happens in `ExampleDevicePlugin::onPluginLoaded()` through `dartwic->registerModuleType`, `registerPeer`, `registerTaskType`, `registerOperation`, `registerDCodeFunction`, and `registerLoop`. IDs are local and become `<plugin-id>.<local-id>`. `createModule` receives the local module ID. The `example_flight_link` peer supplies a `TEMPEST::Transport` and a peer configuration callback; the engine owns RAPID and ARGUS behavior. Its registration includes UI-editable default connection values. Its raw local ZeroMQ transport requires both `receive_endpoint` and `send_endpoint`. The matching Windows flight application in `examples/flight-peer/main.cpp` uses the reversed endpoints; select native or custom transport at startup.
 
+`analyze_samples` demonstrates the shared DCode function schema: its ordinary and prepared handlers return a sum and maximum, then change the first sample through the call-scoped mutable argument. DCode aliases observe that change when the synchronous call returns.
+
 The interface uses `definePlugin({register})`. `addModuleUi` demonstrates both a React icon and a module configuration panel. The module config falls back to `workspace/global_data/plugin_icons/example-device.svg`, which is supplied through `files/`.
 
 Place portable plugin-supplied workspace content under `files/workspace/`. This example includes a schematic-node JSON file at `files/workspace/global_data/schematic_nodes/device_examples/example_indicator.json`; installation copies that content into the selected workspace. Do not put mutable settings, credentials, runtime output, or caches in the installed plugin directory.
 
-See [Storage and settings](docs/storage-and-settings.md) for the five location scopes, layered plugin/module settings, and shared asset examples. This release requires DARTWIC Engine and Interface 2.0.0 or newer. Core 2.0.0 packages will be published separately. The rocket driver itself does not call the new SDK virtual methods.
+See [Storage and settings](docs/storage-and-settings.md) for the five location scopes, layered plugin/module settings, and shared asset examples. This release requires DARTWIC Engine and Interface 2.0.0 or newer. Core 2.0.0 packages will be published separately. The rocket driver uses fixed channel handles for its periodic reads and writes.
 
 The settings panel demonstrates **Decimal places** and **Show units** with a
 sample telemetry preview. It saves changed fields automatically after 500 ms

@@ -191,7 +191,7 @@ namespace Example {
                 {"send_endpoint", "tcp://127.0.0.1:17601"}
             },
             .protocol_id = "tempest.engine",
-            .protocol_version = DARTWIC::EngineContract::version,
+            .protocol_version = 1,
             .engine_protocol = true,
             .create = [](const nlohmann::json& config) {
                 return std::make_shared<ExampleTransport>(config);
@@ -324,6 +324,39 @@ namespace Example {
             }
         );
 
+        DARTWIC::API::DCodeFunctionArgument samples_argument{
+            "samples", "list", "Three numeric samples to analyze and mutate.", true};
+        samples_argument.list_length = 3;
+        samples_argument.element = std::make_shared<DARTWIC::API::DCodeFunctionArgument>(
+            DARTWIC::API::DCodeFunctionArgument{"item", "number", "One sample.", true});
+        dartwic->registerDCodeFunction(
+            "analyze_samples",
+            "Analyze Samples",
+            [](nlohmann::json& payload) {
+                auto& samples = payload.at("samples");
+                const double first = samples.at(0).get<double>();
+                const double second = samples.at(1).get<double>();
+                const double third = samples.at(2).get<double>();
+                samples[0] = first + 10.0;
+                return nlohmann::json{{"sum", first + second + third},
+                    {"maximum", std::max({first, second, third})}};
+            },
+            "Return the sum and maximum of three samples, then add ten to the first sample.",
+            {samples_argument},
+            {{"sum", "number", "Sum before mutation.", true},
+             {"maximum", "number", "Maximum before mutation.", true}},
+            [](DARTWIC::API::DCodePreparedValueView& input,
+                DARTWIC::API::DCodePreparedMutableValue& result) {
+                auto samples = input.field("samples").elements;
+                const double first = samples[0].asNumber();
+                const double second = samples[1].asNumber();
+                const double third = samples[2].asNumber();
+                result.field("sum").setNumber(first + second + third);
+                result.field("maximum").setNumber(std::max({first, second, third}));
+                samples[0].setNumber(first + 10.0);
+            }
+        );
+
         dartwic->registerTelemetry(DARTWIC::API::TelemetryDefinition{
             .id = "echoed",
             .name = "Echoed payload",
@@ -366,7 +399,7 @@ namespace Example {
     }
 }
 
-DARTWIC_PLUGIN_EXPORT uint32_t dartwicPluginSdkAbiVersion() {
+DARTWIC_PLUGIN_EXPORT uint32_t dartwicEngineSdkAbiVersion() noexcept {
     return DARTWIC::Plugins::ENGINE_PLUGIN_SDK_ABI_VERSION;
 }
 
