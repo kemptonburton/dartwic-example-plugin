@@ -1,8 +1,10 @@
 #include "example_device_plugin.h"
 #include "example_transport.h"
 #include "rocket_sim_module.h"
+#include <dartwic/EngineProtocol.h>
 #include <tempest/Peer.h>
 #include <sdk/notifications/NotificationMuteHandle.h>
+#include <algorithm>
 #include <array>
 #include <memory>
 #include <mutex>
@@ -14,20 +16,36 @@ namespace {
 // A simulated acquisition/write pair for the fixed-channel driver guide.
 // No device or networking guarantee is implied by the applied-value echo.
 struct FixedDemoState {
-    DARTWIC::API::FixedChannelBatch inputs;
-    DARTWIC::API::FixedChannelBatch outputs;
-    std::array<double, 1> commands{};
+    DARTWIC::API::FixedChannelHandle command;
+    std::array<DARTWIC::API::ChannelWrite, 2> writes{};
     std::array<double, 2> values{};
+    std::array<DARTWIC::API::ChannelWriteResult, 2> write_results{};
     double ticks = 0;
 };
 
 struct MockDriverTaskState {
     std::shared_ptr<Example::ExampleDeviceModule> module;
-    DARTWIC::API::FixedChannelBatch inputs;
-    DARTWIC::API::FixedChannelBatch outputs;
-    std::array<double, 1> command{};
+    DARTWIC::API::FixedChannelHandle command;
+    std::array<DARTWIC::API::ChannelWrite, 3> writes{};
     std::array<double, 3> values{};
+    std::array<DARTWIC::API::ChannelWriteResult, 3> write_results{};
 };
+
+template <size_t N>
+void requireAcceptedWrites(const std::array<DARTWIC::API::ChannelWriteResult, N>& results) {
+    if (!std::all_of(results.begin(), results.end(), [](const auto& result) { return result.accepted(); }))
+        throw std::runtime_error("Example driver fixed-channel write was denied or its handle became stale.");
+}
+
+template <size_t N>
+void publishWrites(DARTWIC::API::SDK_API& api,
+    std::array<DARTWIC::API::ChannelWrite, N>& writes,
+    const std::array<double, N>& values,
+    std::array<DARTWIC::API::ChannelWriteResult, N>& results) {
+    for (size_t index = 0; index < N; ++index) writes[index].value = values[index];
+    api.upsertChannelBulk(writes, results);
+    requireAcceptedWrites(results);
+}
 
 struct MockChannelBindings {
     std::string measurement;
@@ -77,33 +95,21 @@ void configureMockDriverTask(
     const bool is_write
 ) {
     using namespace DARTWIC::API;
-    auto module = mockModule(api, runtime);
+    auto state = std::make_shared<MockDriverTaskState>();
+    state->module = mockModule(api, runtime);
     const auto channels = mockChannels(runtime);
     const auto task_channels = is_write
         ? std::vector<std::string>{channels.command}
         : std::vector<std::string>{channels.measurement, channels.applied, channels.connected};
-    for (const auto& channel : task_channels) {
-        module->dartwic->insertChannelField(channel, ChannelField::VALUE, 0.0, ChannelStorage::Fixed);
-        module->dartwic->upsertChannelField(channel, ChannelField::RECORD_MODE, RecordMode::Never, ChannelStorage::Fixed);
+    for (size_t index = 0; index < task_channels.size(); ++index) {
+        const auto& channel = task_channels[index];
+        const auto handle = state->module->dartwic->createFixedChannel(channel);
+        if (is_write) state->command = handle;
+        else state->writes[index].channel = handle;
+        state->module->dartwic->upsertChannelData(channel, ChannelField::RECORD_MODE, RecordMode::Never, ChannelStorage::Fixed);
     }
     runtime.setFixedInputChannels(is_write ? std::vector<std::string>{channels.command} : std::vector<std::string>{});
-}
-
-std::shared_ptr<MockDriverTaskState> createMockDriverRuntime(
-    DARTWIC::API::SDK_API* api,
-    DARTWIC::API::TaskRuntime& runtime,
-    const bool is_write
-) {
-    auto state = std::make_shared<MockDriverTaskState>();
-    state->module = mockModule(api, runtime);
-    const auto channels = mockChannels(runtime);
-    if (is_write) {
-        state->inputs = state->module->dartwic->resolveFixedChannels({channels.command});
-    } else {
-        state->outputs = state->module->dartwic->resolveFixedChannels(
-            {channels.measurement, channels.applied, channels.connected});
-    }
-    return state;
+    runtime.setTypedRuntimeContext(is_write ? "mock-driver-write" : "mock-driver-read", state);
 }
 
 class MockDeviceDiscovery {
@@ -191,6 +197,7 @@ namespace Example {
                 {"send_endpoint", "tcp://127.0.0.1:17601"}
             },
             .protocol_id = "tempest.engine",
+            .protocol_version = DARTWIC::EngineContract::version,
             .engine_protocol = true,
             .create = [](const nlohmann::json& config) {
                 return std::make_shared<ExampleTransport>(config);
@@ -220,14 +227,15 @@ namespace Example {
             const std::string measurement = prefix + "_measurement";
             const std::string command = prefix + "_command";
             const std::string applied = prefix + "_applied";
+            auto state = std::make_shared<FixedDemoState>();
             for (const auto& channel : {measurement, command, applied}) {
-                dartwic->insertChannelField(channel, ChannelField::VALUE, 0.0, ChannelStorage::Fixed);
-                dartwic->upsertChannelField(channel, ChannelField::RECORD_MODE, RecordMode::Never, ChannelStorage::Fixed);
+                const auto handle = dartwic->createFixedChannel(channel);
+                if (channel == command) state->command = handle;
+                if (channel == measurement) state->writes[0].channel = handle;
+                if (channel == applied) state->writes[1].channel = handle;
+                dartwic->upsertChannelData(channel, ChannelField::RECORD_MODE, RecordMode::Never, ChannelStorage::Fixed);
             }
             runtime.setFixedInputChannels({command});
-            auto state = std::make_shared<FixedDemoState>();
-            state->inputs = dartwic->resolveFixedChannels({command});
-            state->outputs = dartwic->resolveFixedChannels({measurement, applied});
             runtime.setTypedRuntimeContext("fixed-demo", state);
         };
         fixed_demo.on_start = [](const auto&, DARTWIC::API::TaskRuntime& runtime) {
@@ -236,10 +244,11 @@ namespace Example {
         fixed_demo.on_task = [this](const auto&, DARTWIC::API::TaskRuntime& runtime, double) {
             const auto state = runtime.getTypedRuntimeContext<FixedDemoState>("fixed-demo");
             if (!state) return;
-            dartwic->queryFixedChannelValues(state->inputs, state->commands);
+            const auto command = dartwic->queryChannel(state->command);
+            if (!command.present()) throw std::runtime_error("Fixed demo command binding is unavailable.");
             state->values[0] = ++state->ticks;
-            state->values[1] = state->commands[0];
-            dartwic->upsertFixedChannelValues(state->outputs, state->values);
+            state->values[1] = command.value;
+            publishWrites(*dartwic, state->writes, state->values, state->write_results);
         };
         dartwic->registerTaskType("fixed_driver_demo", "Fixed Driver Demo (simulated)", std::move(fixed_demo));
 
@@ -254,15 +263,12 @@ namespace Example {
         mock_read.on_configure = [this](const auto&, DARTWIC::API::TaskRuntime& runtime) {
             configureMockDriverTask(dartwic, runtime, false);
         };
-        mock_read.on_start = [this](const auto&, DARTWIC::API::TaskRuntime& runtime) {
-            runtime.setTypedRuntimeContext("mock-driver-read", createMockDriverRuntime(dartwic, runtime, false));
-        };
         mock_read.on_task = [](const auto&, DARTWIC::API::TaskRuntime& runtime, double) {
             const auto state = runtime.getTypedRuntimeContext<MockDriverTaskState>("mock-driver-read");
             if (!state || !state->module || !state->module->ensureConnected()) return;
             const auto device = state->module->readDevice();
             state->values = {device.measurement, device.applied, 1.0};
-            state->module->dartwic->upsertFixedChannelValues(state->outputs, state->values);
+            publishWrites(*state->module->dartwic, state->writes, state->values, state->write_results);
         };
         dartwic->registerTaskType("mock_read", "Mock Device Read", std::move(mock_read));
 
@@ -275,14 +281,12 @@ namespace Example {
         mock_write.on_configure = [this](const auto&, DARTWIC::API::TaskRuntime& runtime) {
             configureMockDriverTask(dartwic, runtime, true);
         };
-        mock_write.on_start = [this](const auto&, DARTWIC::API::TaskRuntime& runtime) {
-            runtime.setTypedRuntimeContext("mock-driver-write", createMockDriverRuntime(dartwic, runtime, true));
-        };
         mock_write.on_task = [](const auto&, DARTWIC::API::TaskRuntime& runtime, double) {
             const auto state = runtime.getTypedRuntimeContext<MockDriverTaskState>("mock-driver-write");
             if (!state || !state->module || !state->module->ensureConnected()) return;
-            state->module->dartwic->queryFixedChannelValues(state->inputs, state->command);
-            state->module->writeDevice(state->command[0]);
+            const auto command = state->module->dartwic->queryChannel(state->command);
+            if (!command.present()) throw std::runtime_error("Mock driver command binding is unavailable.");
+            state->module->writeDevice(command.value);
         };
         dartwic->registerTaskType("mock_write", "Mock Device Write", std::move(mock_write));
 
@@ -366,6 +370,10 @@ namespace Example {
 
         return new ExampleDeviceModule(cfg, api);
     }
+}
+
+DARTWIC_PLUGIN_EXPORT uint32_t dartwicPluginSdkAbiVersion() {
+    return DARTWIC::API::ENGINE_PLUGIN_SDK_ABI_VERSION;
 }
 
 DARTWIC_PLUGIN_EXPORT DARTWIC::Plugins::BasePlugin* createPlugin(

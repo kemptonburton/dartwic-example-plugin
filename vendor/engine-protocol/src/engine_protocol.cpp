@@ -41,8 +41,8 @@ struct EngineProtocol::Impl {
         { std::lock_guard lock(mutex);channels=channel_handlers;argus=argus_handlers; }
         return std::visit([&](const auto& v)->Value::Object {
             using T=std::decay_t<decltype(v)>;
-            if constexpr(std::is_same_v<T,ChannelUpsert>) { if(channels.upsert){channels.upsert(v);return {};} }
-            else if constexpr(std::is_same_v<T,ChannelRemove>) { if(channels.remove){channels.remove(v);return {};} }
+            if constexpr(std::is_same_v<T,ChannelUpsert>) { if(channels.upsert)return EngineContract::result(channels.upsert(v)); }
+            else if constexpr(std::is_same_v<T,ChannelRemove>) { if(channels.remove)return EngineContract::result(channels.remove(v)); }
             else if constexpr(std::is_same_v<T,ChannelBulkUpsert>) {
                 if(v.samples.empty()) throw TEMPEST::RemoteError("Bulk command needs samples.","invalid_arguments");
                 if(channels.bulk_upsert){channels.bulk_upsert(v);return {};}
@@ -211,8 +211,8 @@ void EngineProtocol::Logs::publishBatch(std::vector<LogEntry> entries) const {
 }
 EngineProtocol::~EngineProtocol()=default;
 void EngineProtocol::Channels::setHandlers(ChannelHandlers h)const{std::lock_guard lock(owner_->impl_->mutex);owner_->impl_->channel_handlers=std::move(h);}
-void EngineProtocol::Channels::upsert(ChannelUpsert r)const{if(r.channel.empty())throw TEMPEST::Error("Channel name is required.");owner_->impl_->call(std::move(r));}
-void EngineProtocol::Channels::remove(ChannelRemove r)const{if(r.channel.empty())throw TEMPEST::Error("Channel name is required.");owner_->impl_->call(std::move(r));}
+ChannelMutationResult EngineProtocol::Channels::upsert(ChannelUpsert r)const{if(r.channel.empty())throw TEMPEST::Error("Channel name is required.");return EngineContract::mutationResult(owner_->impl_->call(std::move(r)));}
+ChannelMutationResult EngineProtocol::Channels::remove(ChannelRemove r)const{if(r.channel.empty())throw TEMPEST::Error("Channel name is required.");return EngineContract::mutationResult(owner_->impl_->call(std::move(r)));}
 void EngineProtocol::Channels::upsertBulk(ChannelBulkUpsert r)const{if(r.channel.empty()||r.samples.empty())throw TEMPEST::Error("Bulk command needs channel and samples.");owner_->impl_->call(std::move(r));}
 ChannelQueryResult EngineProtocol::Channels::query(ChannelQuery r)const{return EngineContract::channelResult(owner_->impl_->call(std::move(r)));}
 void EngineProtocol::Channels::publishTelemetry(ChannelTelemetry t)const{owner_->impl_->publish(std::move(t));}

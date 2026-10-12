@@ -1,13 +1,12 @@
 import React from "../sdk/react.ts";
 import {defineTaskConfig, useTaskConfigBridge} from "../sdk/tasks/index.ts";
-import {Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "../sdk/ui/general.ts";
+import {Card, CardContent, CardHeader, CardTitle, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "../sdk/ui/general.ts";
 import {ChannelComboBox, convertChannelReferenceToChannelName, ModuleInstanceSelect, TaskBindingTable} from "../sdk/ui/dartwic.ts";
 
 export function ExampleTaskConfig() {
     return (
-        <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
-            Example task editor body.
-        </div>
+        <Card><CardHeader><CardTitle>Example task editor</CardTitle></CardHeader>
+            <CardContent className="text-sm text-muted-foreground">Example task editor body.</CardContent></Card>
     );
 }
 

@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
             {"receive_endpoint", receive_endpoint}, {"send_endpoint", send_endpoint}});
         TEMPEST::Peer peer({.node_name="FLIGHT_COMPUTER",
             .peer_id=transport == "native" ? "tempest.engine" : "example_device_plugin.example_flight_link",
-            .protocol_id="tempest.engine"}, link);
+            .protocol_id="tempest.engine", .protocol_version=DARTWIC::EngineContract::version}, link);
         DARTWIC::EngineProtocol protocol(peer);
         std::mutex mutex;
         std::atomic<double> rate{5}, ambient{295};
@@ -103,6 +103,7 @@ int main(int argc, char** argv) {
             if (value < 1 || value > 20) throw TEMPEST::RemoteError("Telemetry rate must be 1 through 20 Hz", "invalid_argument");
             rate = value;
             log("Ground commanded telemetry rate: " + std::to_string(value) + " Hz");
+            return DARTWIC::ChannelMutationResult{DARTWIC::ChannelMutationState::Accepted};
         };
         channels.snapshot = [&](const DARTWIC::ChannelSnapshotTelemetry& snapshot) {
             if (++ground_snapshots == 1) log("Received first ground channel snapshot");

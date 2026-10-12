@@ -20,6 +20,9 @@
     "deploy:interface": "node ./scripts/plugin-deploy.mjs --interface"
   },
   "devDependencies": {
-    "esbuild": "^0.25.0"
+    "esbuild": "^0.25.0",
+    "postcss": "^8.4.48",
+    "tailwindcss": "^3.4.14",
+    "tailwindcss-animate": "^1.0.7"
   }
 }

@@ -23,6 +23,10 @@ struct ChannelUpsert {
     std::string source_session_id;
     bool take_manual_control = false;
     bool release_manual_override = false;
+    /** Empty for an ordinary upsert; otherwise one owner-side authority intent. */
+    std::string authority_operation;
+    /** Create-only dynamic request; the owner never overwrites an existing channel. */
+    bool insert_only = false;
 };
 /** Channel deletion identified by owner and channel, with optional session/revision lineage. */
 struct ChannelRemove {
@@ -30,6 +34,7 @@ struct ChannelRemove {
     std::string channel;
     uint64_t revision = 0;
     std::string source_session_id;
+    std::string command_origin;
 };
 /** Batch of timestamped samples for one channel. A command requires at least one sample. */
 struct ChannelBulkUpsert {
@@ -52,6 +57,19 @@ struct ChannelSnapshot {
 };
 /** Channel snapshots returned by a peer query handler. */
 struct ChannelQueryResult { std::vector<ChannelSnapshot> channels; };
+/** Synchronous owner decision for a channel mutation request. Transport failure is separate. */
+enum class ChannelMutationState : uint8_t {
+    Accepted, AlreadyExists, Removed, Missing, AuthorityDenied, Indeterminate
+};
+/** Synchronous owner reply for a channel command. Create-only inserts report accepted or already existing, with owner timestamp, creation flag, and separate recording, notification, and propagation outcomes. Removal reports removed or missing. Ordinary upserts may remain indeterminate when their handler does not expose a local decision; transport errors are reported separately by Peer. */
+struct ChannelMutationResult {
+    ChannelMutationState state = ChannelMutationState::Indeterminate;
+    std::string recording = "not_selected";
+    std::string notification = "not_attempted";
+    std::string propagation = "not_run";
+    uint64_t timestamp = 0;
+    bool created = false;
+};
 /** One field write within a fixed-generation telemetry batch. */
 struct FixedGenerationWrite {
     std::string channel;
@@ -130,8 +148,8 @@ struct ArgusEventTelemetry {
 
 /** Application handlers for incoming channel commands, queries, and telemetry. Install before Peer.start so initial synchronization can be served. */
 struct ChannelHandlers {
-    std::function<void(const ChannelUpsert&)> upsert;
-    std::function<void(const ChannelRemove&)> remove;
+    std::function<ChannelMutationResult(const ChannelUpsert&)> upsert;
+    std::function<ChannelMutationResult(const ChannelRemove&)> remove;
     std::function<void(const ChannelBulkUpsert&)> bulk_upsert;
     std::function<ChannelQueryResult(const ChannelQuery&)> query;
     std::function<void(const ChannelTelemetry&)> telemetry;

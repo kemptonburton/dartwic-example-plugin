@@ -22,6 +22,8 @@ namespace DARTWIC::Modules {
 }
 
 namespace DARTWIC::API {
+    // A changed SDK_API virtual signature requires a new plugin binary.
+    inline constexpr uint32_t ENGINE_PLUGIN_SDK_ABI_VERSION = 11;
     /** Portable shared-asset path below workspace/global_data. @dartwic-reference @category Workspace Assets */
     inline std::string workspaceAssetPath(const std::string& asset_namespace, const std::string& filename) {
         const auto safe_segment = [](const std::string& value) {
@@ -125,8 +127,8 @@ namespace DARTWIC::API {
     /**
      * Stable, pre-resolved address of a fixed RAPID channel.
      *
-     * Handles are intentionally opaque to plugins. Resolve them during task setup and
-     * reuse them in high-frequency callbacks to avoid channel-name lookup overhead.
+     * Handles are intentionally opaque to plugins. Save the value returned by
+     * createFixedChannel during configuration and reuse it in callbacks.
      * @dartwic-reference
      * @category Channels
      */
@@ -137,17 +139,75 @@ namespace DARTWIC::API {
         [[nodiscard]] bool valid() const noexcept { return binding_generation != 0; }
     };
 
-    /**
-     * Ordered channel names and handles used by the fixed-channel batch APIs.
-     * @dartwic-reference
-     * @category Channels
-     */
-    struct FixedChannelBatch {
-        std::vector<std::string> channels;
-        std::vector<FixedChannelHandle> handles;
+    /** Live numeric result of one named or fixed-handle read. @dartwic-reference @category Channels */
+    struct ChannelValueResult {
+        enum class State : uint8_t { Present, Missing, InvalidHandle, Unavailable };
+        State state{State::Missing};
+        double value{0.0};
+        uint64_t timestamp{0};
+        uint64_t observation_age_ns{0};
+        [[nodiscard]] bool present() const noexcept { return state == State::Present; }
+        [[nodiscard]] double valueOr(double fallback) const noexcept { return present() ? value : fallback; }
+    };
 
-        [[nodiscard]] size_t size() const noexcept { return handles.size(); }
-        [[nodiscard]] bool empty() const noexcept { return handles.empty(); }
+    /** Cold named or fixed-handle status with explicit missing and invalid-binding states. A fixed channel includes its current binding. @dartwic-reference @category Channels */
+    struct ChannelStatusResult {
+        enum class State : uint8_t { Present, Missing, InvalidHandle, Unavailable };
+        State state{State::Missing};
+        uint64_t timestamp{0};
+        double stale_timeout{0.0};
+        bool manual_override{false};
+        std::optional<FixedChannelHandle> fixed_handle;
+        uint64_t observation_age_ns{0};
+        [[nodiscard]] bool present() const noexcept { return state == State::Present; }
+    };
+
+    /** Ordinary full-data query; data is populated only for Present. JSON assembly can allocate. @dartwic-reference @category Channels */
+    struct ChannelDataResult {
+        enum class State : uint8_t { Present, Missing, InvalidHandle, Unavailable };
+        State state{State::Missing};
+        nlohmann::json data = nlohmann::json::object();
+        uint64_t observation_age_ns{0};
+        [[nodiscard]] bool present() const noexcept { return state == State::Present; }
+    };
+
+    /** Local mutation and downstream admission outcomes for one channel write or insert. @dartwic-reference @category Channels */
+    struct ChannelWriteResult {
+        enum class State : uint8_t { NotAttempted, Indeterminate, Accepted, AlreadyExists, Missing, AuthorityDenied, InvalidHandle, RemoteSubmitted, Unavailable };
+        enum class Recording : uint8_t { NotSelected, Admitted, Full, Stopped, InvalidIds, Unprepared };
+        enum class Notification : uint8_t { NotAttempted, Admitted, Failed, Full, Stopped, Unprepared };
+        enum class Propagation : uint8_t { NotRun, NotConfigured, ObserverReturned, ObserverFailed };
+        State state{State::NotAttempted};
+        Recording recording{Recording::NotSelected};
+        Notification notification{Notification::NotAttempted};
+        Propagation propagation{Propagation::NotRun};
+        uint64_t timestamp{0};
+        bool created{false};
+        [[nodiscard]] bool accepted() const noexcept { return state == State::Accepted; }
+        [[nodiscard]] bool submitted() const noexcept { return state == State::RemoteSubmitted; }
+    };
+
+    /** Local removal or remote submission result. A protected local channel is rejected with an exception. @dartwic-reference @category Channels */
+    struct ChannelRemoveResult {
+        enum class State : uint8_t { Removed, Missing, RemoteSubmitted, Unavailable, Indeterminate };
+        State state{State::Missing};
+        [[nodiscard]] bool removed() const noexcept { return state == State::Removed; }
+        [[nodiscard]] bool submitted() const noexcept { return state == State::RemoteSubmitted; }
+    };
+
+    /** One ordered numeric bulk entry. Prepare fixed handles and storage before execution. @dartwic-reference @category Channels */
+    struct ChannelWrite {
+        std::variant<std::string, FixedChannelHandle> channel;
+        double value{0.0};
+        std::optional<uint64_t> timestamp;
+    };
+
+    /** Sorted names from local discovery or one explicit node's last received snapshot. @dartwic-reference @category Channels */
+    struct ChannelKeysResult {
+        enum class State : uint8_t { Available, Unavailable };
+        State state{State::Unavailable};
+        std::vector<std::string> keys;
+        uint64_t observation_age_ns{0};
     };
 
     /**
@@ -270,10 +330,11 @@ namespace DARTWIC::API {
         virtual void clearRuntimeContext() = 0;
         // Keep new virtual functions appended so plugins built against the previous
         // TaskRuntime vtable retain the indices of all existing functions.
-        /** Declares this task's fixed snapshot inputs from on_configure. Every declared name
+        /** Declares this task's fixed inputs from on_configure. Every declared name
          * must refer to fixed storage when configuration completes; missing/dynamic inputs
-         * fail task preparation. An empty list requests an empty fixed input snapshot.
-         * Calls from other callbacks throw rather than changing an active plan. */
+         * fail task configuration. An empty list declares no fixed inputs. Reads remain live;
+         * this declaration does not capture values at task entry. Calls from other callbacks
+         * throw rather than changing an active configuration. */
         virtual void setFixedInputChannels(std::vector<std::string> channels) = 0;
 
         /**
@@ -416,6 +477,109 @@ namespace DARTWIC::API {
         virtual ~SDK_API() = default;
 
         /**
+         * Reads one live numeric value and timestamp. Missing names and retired fixed
+         * bindings have distinct states; successive calls may observe newer values.
+         * This is synchronous and does not capture a task-cycle snapshot.
+         * @dartwic-reference
+         * @category Channels
+         * @param channel Flat channel name.
+         * @returns The value, timestamp and availability state.
+         */
+        virtual ChannelValueResult queryChannel(const std::string& channel) = 0;
+        /** Reads a peer observation. Unavailable means no connected snapshot; age is measured since local receipt.
+         * @dartwic-reference @category Channels
+         * @param node Owning peer node.
+         * @param channel Unqualified channel name.
+         * @returns Observed value, source timestamp and local receipt age.
+         */
+        virtual ChannelValueResult queryChannel(const std::string& node, const std::string& channel) = 0;
+        /** Reads one live fixed binding; InvalidHandle reports a retired binding. */
+        virtual ChannelValueResult queryChannel(FixedChannelHandle channel) = 0;
+        /** Copies a local channel and assembles descriptive metadata.
+         * @dartwic-reference @category Channels
+         * @param channel Flat channel name.
+         * @returns Current data or Missing.
+         */
+        virtual ChannelDataResult queryChannelData(const std::string& channel) = 0;
+        /** Reads an ordinary full peer observation with availability and local receipt age.
+         * @dartwic-reference @category Channels
+         * @param node Owning peer node.
+         * @param channel Unqualified channel name.
+         * @returns Observed data or Missing or Unavailable.
+         */
+        virtual ChannelDataResult queryChannelData(const std::string& node, const std::string& channel) = 0;
+        /** Copies full data through a fixed binding; InvalidHandle reports retirement.
+         * @dartwic-reference @category Channels
+         * @param channel Local fixed binding.
+         * @returns Current data or InvalidHandle.
+         */
+        virtual ChannelDataResult queryChannelData(FixedChannelHandle channel) = 0;
+        /** Reads source timestamp, stale timeout and manual control state by name.
+         * @dartwic-reference @category Channels
+         * @param channel Flat channel name.
+         * @returns Current channel status or Missing.
+         */
+        virtual ChannelStatusResult queryChannelStatus(const std::string& channel) = 0;
+        /** Reads peer status from the last received snapshot.
+         * @dartwic-reference @category Channels
+         * @param node Owning peer node.
+         * @param channel Unqualified channel name.
+         * @returns Observed status or Missing or Unavailable.
+         */
+        virtual ChannelStatusResult queryChannelStatus(const std::string& node, const std::string& channel) = 0;
+        /** Reads status through a fixed binding; InvalidHandle reports retirement.
+         * @dartwic-reference @category Channels
+         * @param channel Local fixed binding.
+         * @returns Current channel status or InvalidHandle.
+         */
+        virtual ChannelStatusResult queryChannelStatus(FixedChannelHandle channel) = 0;
+
+        /**
+         * Attempts an immediate numeric write under existing authority. A missing
+         * name may create a dynamic channel; a fixed handle never creates storage.
+         * Accepted means local commit, not recorder admission or device action.
+         * Inline propagation runs before return and can fail after local commit.
+         * @dartwic-reference
+         * @category Channels
+         * @param channel Flat channel name.
+         * @param value New numeric value.
+         * @param timestamp Optional Unix-nanosecond timestamp.
+         * @returns Local write and downstream admission outcomes.
+         */
+        virtual ChannelWriteResult upsertChannel(const std::string& channel, double value,
+            std::optional<uint64_t> timestamp = std::nullopt) = 0;
+        /** Waits for the owning node's numeric write decision. Transport failure can leave the result indeterminate.
+         * @dartwic-reference @category Channels
+         * @param node Owning peer node.
+         * @param channel Unqualified channel name.
+         * @param value New numeric value.
+         * @param timestamp Optional Unix-nanosecond timestamp.
+         * @returns Owner write state, timestamp and admission outcomes, or unavailable/indeterminate.
+         */
+        virtual ChannelWriteResult upsertChannel(const std::string& node,
+            const std::string& channel, double value,
+            std::optional<uint64_t> timestamp = std::nullopt) = 0;
+        /** Writes one fixed binding immediately; InvalidHandle never writes a reused slot. */
+        virtual ChannelWriteResult upsertChannel(FixedChannelHandle channel, double value,
+            std::optional<uint64_t> timestamp = std::nullopt) = 0;
+
+        /**
+         * Writes ordered numeric entries with scalar live-write semantics.
+         *
+         * This is not a multi-channel transaction: accepted earlier writes remain if a
+         * later entry fails. Results are caller-owned and must match write count.
+         * An exception leaves the current result Indeterminate and later entries
+         * NotAttempted. Prepare/reuse fixed entries and result storage before a
+         * repeated callback; framework attribution and propagation still have costs.
+         * @dartwic-reference
+         * @category Channels
+         * @param writes Ordered named or fixed-handle numeric writes.
+         * @param results Caller-owned result span of the same length.
+         */
+        virtual void upsertChannelBulk(std::span<const ChannelWrite> writes,
+            std::span<ChannelWriteResult> results) = 0;
+
+        /**
          * Reads a typed field and returns the supplied default when the field is unavailable.
          * @dartwic-reference
          * @category Channels
@@ -428,61 +592,117 @@ namespace DARTWIC::API {
             ChannelField field,
             std::optional<ChannelValue> default_value) = 0;
 
+        /** Returns copied, sorted visible names containing filter, including replicated node-qualified names; empty filter selects all. Cold discovery call.
+         * @dartwic-reference @category Channels
+         * @param filter Optional substring filter.
+         * @returns Available with sorted visible channel names; local receipt age is zero.
+         */
+        virtual ChannelKeysResult queryChannelKeys(const std::string& filter = "") = 0;
+        /** Returns unqualified names for an explicit node, or Unavailable before a connected snapshot.
+         * @dartwic-reference @category Channels
+         * @param node Owning peer node.
+         * @param filter Optional substring filter.
+         * @returns Sorted observed names and local receipt age, or Unavailable.
+         */
+        virtual ChannelKeysResult queryChannelKeys(const std::string& node,
+            const std::string& filter) = 0;
+
         /**
-         * Creates a missing channel with an initial field value; an existing channel is left unchanged.
+         * Creates a missing channel with an initial field value and reports whether creation occurred.
          *
          * This is a no-op for an existing channel, including its storage class.
-         * To promote existing storage, use upsertChannelField with Fixed storage during configuration.
+         * To promote existing storage, use upsertChannelData with Fixed storage during configuration.
          * @dartwic-reference
          * @category Channels
          * @param channel Flat channel name.
          * @param field Field to insert.
          * @param value Initial field value.
          * @param storage Storage used for a newly created channel; defaults to dynamic.
+         * @returns Local creation, recording, notification and inline observer outcomes.
          */
-        virtual void insertChannelField(const std::string& channel,
+        virtual ChannelWriteResult insertChannel(const std::string& channel,
             ChannelField field,
             ChannelValue value,
             ChannelStorage storage = ChannelStorage::Dynamic) = 0;
+        /** Waits for the owning node's create-only dynamic channel decision.
+         * @dartwic-reference @category Channels
+         * @param node Owning peer node.
+         * @param channel Unqualified channel name.
+         * @param field Initial field to set.
+         * @param value Initial field value.
+         * @returns Owner creation or already-existing state, or unavailable/indeterminate.
+         */
+        virtual ChannelWriteResult insertChannel(const std::string& node,
+            const std::string& channel, ChannelField field, ChannelValue value) = 0;
 
         /**
-         * Creates or replaces a field on a RAPID channel.
+         * Patches one permitted field on a RAPID channel and reports its outcome.
          * @dartwic-reference
          * @category Channels
          * @param channel Flat channel name.
          * @param field Field to write.
          * @param value New field value.
          * @param storage Storage used only when creating or promoting the channel; defaults to dynamic.
+         * @returns Local mutation, recording, notification and inline observer outcomes.
          */
-        virtual void upsertChannelField(const std::string& channel,
+        virtual ChannelWriteResult upsertChannelData(const std::string& channel,
             ChannelField field,
             ChannelValue value,
             ChannelStorage storage = ChannelStorage::Dynamic) = 0;
+        /** Submits a typed write to the owning node; a send failure can leave execution indeterminate.
+         * @dartwic-reference @category Channels
+         * @param node Owning peer node.
+         * @param channel Unqualified channel name.
+         * @param field Field to patch.
+         * @param value New field value.
+         * @returns Owner field-write state and admission outcomes, or unavailable/indeterminate.
+         */
+        virtual ChannelWriteResult upsertChannelData(const std::string& node,
+            const std::string& channel, ChannelField field, ChannelValue value) = 0;
+
+        /** Patches one field through a fixed binding. A retired handle returns InvalidHandle.
+         * @dartwic-reference @category Channels
+         * @param channel Local fixed binding.
+         * @param field Field to patch.
+         * @param value New field value.
+         * @returns Local mutation, recording, notification and observer outcomes.
+         */
+        virtual ChannelWriteResult upsertChannelData(FixedChannelHandle channel,
+            ChannelField field, ChannelValue value) = 0;
 
         /**
          * Creates a channel in fixed RAPID storage, or promotes an existing dynamic channel.
          *
          * Call during startup configuration or a task's on_configure callback. The engine's
-         * declared configuration transaction permits layout updates after active task snapshots
-         * drain, even when the layout is sealed. Direct layout changes outside that boundary
-         * remain restricted. This writes initial_value; ordinary subsequent field writes
-         * preserve fixed storage. Do not recreate the channel in every acquisition callback.
+         * declared configuration boundary permits layout updates even when the layout is sealed.
+         * Direct layout changes outside that boundary remain restricted. The initial value
+         * applies only to a new channel; an existing fixed channel retains its live state.
+         * Save the returned handle in per-instance state for runtime calls.
          *
          * @dartwic-reference
          * @category Channels
          * @param channel Flat channel name.
-         * @param initial_value Initial numeric value; defaults to zero.
+         * @param initial_value Initial numeric value for a new channel; defaults to zero.
+         * @returns The current fixed binding. Throws if configuration cannot provide one.
          */
-        void createFixedChannel(const std::string& channel, double initial_value = 0.0);
+        virtual FixedChannelHandle createFixedChannel(const std::string& channel, double initial_value = 0.0) = 0;
 
         /**
          * Removes a channel and its associated field data.
          * @dartwic-reference
          * @category Channels
          * @param channel Channel to remove.
-         * @returns Whether a channel was removed.
+         * @returns Removed or Missing. A protected channel is rejected with an exception.
          */
-        virtual bool removeChannel(const std::string& channel) = 0;
+        virtual ChannelRemoveResult removeChannel(const std::string& channel) = 0;
+        /** Waits for the owning node's channel removal decision.
+         * @dartwic-reference @category Channels
+         * @param node Owning peer node.
+         * @param channel Unqualified channel name.
+         * @returns Owner removed or missing state, or unavailable/indeterminate.
+         */
+        virtual ChannelRemoveResult removeChannel(const std::string& node,
+            const std::string& channel) = 0;
 
         /**
          * Registers a plugin-local module type and returns its qualified identifier.
@@ -655,30 +875,52 @@ namespace DARTWIC::API {
          * @category Channel Authority
          * @param channel Flat channel name.
          * @param value Commanded value.
+         * @returns Owner decision and separate recording, notification, and propagation outcomes.
          */
-        virtual void commandChannel(const std::string& channel, ChannelValue value) = 0;
+        virtual ChannelWriteResult commandChannel(const std::string& channel, ChannelValue value) = 0;
+        /** Commands a fixed channel through its retained binding and reports stale binding. */
+        virtual ChannelWriteResult commandChannel(FixedChannelHandle channel, ChannelValue value) = 0;
         /**
          * Establishes observe-only authority for the active task or loop, optionally writing its value.
          * @dartwic-reference
          * @category Channel Authority
          * @param channel Flat channel name.
          * @param value Optional value; omitting it preserves the current numeric value.
+         * @returns Owner decision and separate recording, notification, and propagation outcomes.
          */
-        virtual void setChannel(const std::string& channel, std::optional<ChannelValue> value = std::nullopt) = 0;
+        virtual ChannelWriteResult setChannel(const std::string& channel, std::optional<ChannelValue> value = std::nullopt) = 0;
+        /** Sets observe-only authority on a fixed binding and reports stale binding. */
+        virtual ChannelWriteResult setChannel(FixedChannelHandle channel, std::optional<ChannelValue> value = std::nullopt) = 0;
         /**
          * Claims channel authority for the active task or loop controller.
          * @dartwic-reference
          * @category Channel Authority
          * @param channel Flat channel name.
+         * @returns Owner decision and whether authority notification was admitted.
          */
-        virtual void claimChannel(const std::string& channel) = 0;
+        virtual ChannelWriteResult claimChannel(const std::string& channel) = 0;
+        /** Claims a fixed binding and reports rejection or stale binding. */
+        virtual ChannelWriteResult claimChannel(FixedChannelHandle channel) = 0;
+        /** Attempts an automation override and value write under an eligible controller.
+         * @dartwic-reference
+         * @category Channel Authority
+         * @param channel Flat channel name.
+         * @param value Requested value.
+         * @returns Owner decision and separate recording, notification, and propagation outcomes.
+         */
+        virtual ChannelWriteResult overrideChannel(const std::string& channel, ChannelValue value) = 0;
+        /** Overrides a fixed binding and reports rejection or stale binding. */
+        virtual ChannelWriteResult overrideChannel(FixedChannelHandle channel, ChannelValue value) = 0;
         /**
          * Releases authority previously claimed by the active controller.
          * @dartwic-reference
          * @category Channel Authority
          * @param channel Flat channel name.
+         * @returns Release decision; the channel value is preserved.
          */
-        virtual void freeChannel(const std::string& channel) = 0;
+        virtual ChannelWriteResult freeChannel(const std::string& channel) = 0;
+        /** Frees authority on a fixed binding and reports rejection or stale binding. */
+        virtual ChannelWriteResult freeChannel(FixedChannelHandle channel) = 0;
 
         /**
          * Creates or refreshes a correlated ARGUS event from a JSON declaration.
@@ -711,51 +953,6 @@ namespace DARTWIC::API {
             (void)status;
             return false;
         }
-
-        /**
-         * Resolves fixed channels during configuration to avoid repeated name lookup in callbacks.
-         * This does not make the complete callback, write wrapper, or commit allocation-free.
-         * Throws when a name is missing or does not refer to fixed storage.
-         * @dartwic-reference
-         * @category Channels
-         * @param channels Ordered fixed-channel names to resolve.
-         */
-        virtual FixedChannelBatch resolveFixedChannels(const std::vector<std::string>& channels) = 0;
-
-        /**
-         * Reads a coherent task-input snapshot into caller-owned storage.
-         *
-         * Declare these inputs with TaskRuntime::setFixedInputChannels during configuration.
-         * Outside a task snapshot, reads observe live values instead. Undeclared inputs in an
-         * ordinary partial snapshot also use live fallback, so declare every fixed input.
-         * Re-resolve after configuration changes; stale handles return the supplied fallback.
-         * @dartwic-reference
-         * @category Channels
-         * @param batch Previously resolved fixed-channel batch.
-         * @param destination Caller-owned output span with one element per channel.
-         * @param default_value Value used when a fixed-channel value is unavailable.
-         */
-        virtual void queryFixedChannelValues(const FixedChannelBatch& batch,
-            std::span<double> destination,
-            double default_value = 0.0) = 0;
-
-        /**
-         * Stages one value per fixed channel in the current task transaction.
-         *
-         * Preserves ordinary command-authority checks. This does not claim channel ownership.
-         * Outside a task transaction, values are written immediately through the ordinary
-         * path; the call alone does not establish a coherent multi-channel transaction.
-         * Reuse the batch and value buffer. Staging, attribution, commit, inline reactions,
-         * and recording still have costs beyond resolved-handle access.
-         * @dartwic-reference
-         * @category Channels
-         * @param batch Previously resolved fixed-channel batch.
-         * @param values Input span with one value per channel.
-         * @param timestamp Optional Unix-epoch timestamp in nanoseconds.
-         */
-        virtual void upsertFixedChannelValues(const FixedChannelBatch& batch,
-            std::span<const double> values,
-            std::optional<uint64_t> timestamp = std::nullopt) = 0;
 
         /**
          * Opens or updates a named interface workflow without blocking the plugin loop.
@@ -962,14 +1159,6 @@ namespace DARTWIC::API {
 
     };
 
-    inline void SDK_API::createFixedChannel(const std::string& channel, double initial_value) {
-        upsertChannelField(
-            channel,
-            ChannelField::VALUE,
-            ChannelValue{initial_value},
-            ChannelStorage::Fixed
-        );
-    }
 }
 
 #endif //SDK_API_H

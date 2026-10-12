@@ -16,7 +16,7 @@ inline constexpr const char* ARGUS_DELETE_EVENT_OPERATION = "tempest-peer/argus/
 // functions describe application payloads; they do not serialize wire bytes.
 namespace EngineContract {
 /** DARTWIC application contract version. */
-inline constexpr int version = 1;
+inline constexpr int version = 3;
 /** Map a typed request to its TEMPEST operation name. */
 std::string operation(const EngineRequest& request);
 /** Map a typed request to its argument object. */
@@ -25,6 +25,10 @@ Value::Object arguments(const EngineRequest& request);
 EngineRequest request(const std::string& operation, const Value::Object& arguments);
 /** Map a typed result to its TEMPEST response object. */
 Value::Object result(const ChannelQueryResult& result);
+/** Map and validate an owner channel mutation decision. */
+Value::Object result(const ChannelMutationResult& result);
+/** Parse and validate the synchronous owner channel mutation response. */
+ChannelMutationResult mutationResult(const Value::Object& result);
 /** Map a typed result to its TEMPEST response object. */
 Value::Object result(const ArgusQueryResult& result);
 /** Map a typed result to its TEMPEST response object. */
@@ -51,11 +55,11 @@ public:
     EngineProtocol(const EngineProtocol&) = delete;
     EngineProtocol& operator=(const EngineProtocol&) = delete;
 
-    /** Channel commands, snapshot queries and telemetry. Publish reports state without acknowledgement; upsert/remove/upsertBulk wait for the remote handler. */
+    /** Channel commands, snapshot queries and telemetry. Upsert/remove wait for the handler result. */
     class Channels {
     public:
-        void upsert(ChannelUpsert request) const;
-        void remove(ChannelRemove request) const;
+        ChannelMutationResult upsert(ChannelUpsert request) const;
+        ChannelMutationResult remove(ChannelRemove request) const;
         void upsertBulk(ChannelBulkUpsert request) const;
         ChannelQueryResult query(ChannelQuery request = {}) const;
         void publishTelemetry(ChannelTelemetry telemetry) const;

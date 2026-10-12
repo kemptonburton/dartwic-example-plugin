@@ -17,6 +17,11 @@ uint64_t number(const Object& o, const char* key, uint64_t fallback = 0) {
     if (auto n = std::get_if<int64_t>(&v->storage()); n && *n >= 0) return static_cast<uint64_t>(*n);
     throw TEMPEST::RemoteError(std::string(key) + " must be a nonnegative integer.", "invalid_arguments");
 }
+bool boolean(const Object& o, const char* key, bool fallback = false) {
+    auto v = find(o, key); if (!v) return fallback;
+    if (auto b = std::get_if<bool>(&v->storage())) return *b;
+    throw TEMPEST::RemoteError(std::string(key) + " must be boolean.", "invalid_arguments");
+}
 Object object(const Object& o, const char* key) { auto v=find(o,key); return v ? v->object() : Object{}; }
 Array array(const Object& o, const char* key) { auto v=find(o,key); return v ? v->array() : Array{}; }
 Value value(const Object& o, const char* key) { auto v=find(o,key); return v ? *v : Value{}; }
@@ -74,8 +79,11 @@ Object arguments(const EngineRequest& r) {
                 o["field"]=v.field; o["value"]=v.value; o["channel_data"]=v.channel_data;
                 o["take_manual_control"]=v.take_manual_control;
                 o["release_manual_override"]=v.release_manual_override;
+                o["authority_operation"]=v.authority_operation;
+                o["insert_only"]=v.insert_only;
                 if(v.timestamp) o["timestamp"]=*v.timestamp;
             }
+            if constexpr(std::is_same_v<T,ChannelRemove>) o["command_origin"]=v.command_origin;
             if constexpr(!std::is_same_v<T,ChannelRemove>) {
                 o["samples"]=samples(v.samples); o["command_origin"]=v.command_origin;
             }
@@ -92,10 +100,12 @@ EngineRequest request(const std::string& name,const Object& o) {
         v.revision=number(o,"revision"); v.source_session_id=text(o,"source_session_id");
         if(const auto flag=find(o,"take_manual_control")) v.take_manual_control=std::get<bool>(flag->storage());
         if(const auto flag=find(o,"release_manual_override")) v.release_manual_override=std::get<bool>(flag->storage());
+        v.authority_operation=text(o,"authority_operation");
+        if(const auto flag=find(o,"insert_only")) v.insert_only=std::get<bool>(flag->storage());
         return v;
     }
     if(name=="tempest-peer/channels/remove") {
-        channelName(o); return ChannelRemove{text(o,"owner_node"),text(o,"channel"),number(o,"revision"),text(o,"source_session_id")};
+        channelName(o); return ChannelRemove{text(o,"owner_node"),text(o,"channel"),number(o,"revision"),text(o,"source_session_id"),text(o,"command_origin")};
     }
     if(name=="tempest-peer/channels/upsert-bulk") {
         channelName(o);
@@ -115,6 +125,37 @@ Object result(const ChannelQueryResult& r) {
     Array a; for(const auto& c:r.channels) a.emplace_back(Object{{"owner_node",c.owner_node},{"channel",c.channel},
         {"channel_data",c.channel_data},{"revision",c.revision},{"source_session_id",c.source_session_id}});
     return {{"channels",a}};
+}
+Object result(const ChannelMutationResult& r) {
+    const char* state = "indeterminate";
+    switch (r.state) {
+        case ChannelMutationState::Accepted: state = "accepted"; break;
+        case ChannelMutationState::AlreadyExists: state = "already_exists"; break;
+        case ChannelMutationState::Removed: state = "removed"; break;
+        case ChannelMutationState::Missing: state = "missing"; break;
+        case ChannelMutationState::AuthorityDenied: state = "authority_denied"; break;
+        case ChannelMutationState::Indeterminate: break;
+    }
+    return {{"state", state}, {"recording", r.recording},
+        {"notification", r.notification}, {"propagation", r.propagation},
+        {"timestamp", r.timestamp}, {"created", r.created}};
+}
+ChannelMutationResult mutationResult(const Object& o) {
+    const auto state = text(o, "state");
+    ChannelMutationResult result;
+    if (state == "accepted") result.state = ChannelMutationState::Accepted;
+    else if (state == "already_exists") result.state = ChannelMutationState::AlreadyExists;
+    else if (state == "removed") result.state = ChannelMutationState::Removed;
+    else if (state == "missing") result.state = ChannelMutationState::Missing;
+    else if (state == "authority_denied") result.state = ChannelMutationState::AuthorityDenied;
+    else if (state != "indeterminate")
+        throw TEMPEST::RemoteError("Invalid channel mutation result state.", "invalid_result");
+    result.recording = text(o, "recording", "not_selected");
+    result.notification = text(o, "notification", "not_attempted");
+    result.propagation = text(o, "propagation", "not_run");
+    result.timestamp = number(o, "timestamp");
+    result.created = boolean(o, "created");
+    return result;
 }
 Object result(const ArgusQueryResult& r) {
     Array a; for(const auto& e:r.events) a.emplace_back(event(e));

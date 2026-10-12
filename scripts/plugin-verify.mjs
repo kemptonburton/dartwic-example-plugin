@@ -13,13 +13,23 @@ import {
 } from "./plugin-utils.mjs";
 
 async function materializeInterfacePlugin(pluginId, runtimePath) {
-  const sandbox = {window: {}, console};
+  const elements = new Map();
+  const document = {
+    getElementById: (id) => elements.get(id) ?? null,
+    createElement: () => ({id: "", textContent: ""}),
+    head: {appendChild(element) { elements.set(element.id, element); }},
+  };
+  const sandbox = {window: {}, document, console};
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(await fs.readFile(runtimePath, "utf8"), sandbox, {filename: runtimePath});
   const registration = sandbox.window.__dartwicPluginRegistry__?.[pluginId];
   if (!registration || typeof registration.createPlugin !== "function") {
     throw new Error(`Packaged interface runtime did not register '${pluginId}'.`);
+  }
+  const stylesheet = elements.get(`dartwic-plugin-style-${pluginId}`)?.textContent ?? "";
+  if (!stylesheet.includes(".max-w-xl") || !stylesheet.includes("var(--card)")) {
+    throw new Error(`Packaged interface runtime did not include theme-aware plugin styles for '${pluginId}'.`);
   }
   return registration.createPlugin({React: {}});
 }

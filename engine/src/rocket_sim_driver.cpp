@@ -60,21 +60,15 @@ void registerRocketDriver(DARTWIC::API::SDK_API* api) {
             auto inputs = writer ? std::vector<std::string>{} : RocketSimModule::inputNames(prefix, false);
             const auto bindings = writer ? bindingsFor(args, "write_mappings", RocketSimModule::writeFields, prefix)
                 : bindingsFor(args, "read_mappings", RocketSimModule::readFields, prefix);
-            auto names = inputs;
-            for (const auto& [index, channel] : bindings) names.push_back(channel);
-            for (const auto& name : names) {
-                api->upsertChannelField(name, ChannelField::VALUE,
-                    api->queryChannelField(name, ChannelField::VALUE, 0.0), ChannelStorage::Fixed);
-            }
-            if (!writer) {
+            for (const auto& name : inputs) api->createFixedChannel(name);
+            for (const auto& [index, channel] : bindings) {
+                const auto handle = api->createFixedChannel(channel);
+                if (writer) continue;
                 const std::array<std::string, 24> units = {"mA", "K", "K", "K", "%", "%", "kg/s", "", "", "s"};
-                for (const auto& [index, channel] : bindings) {
-                    api->upsertChannelField(channel, ChannelField::UNITS, units[index]);
-                    api->upsertChannelField(channel, ChannelField::CONTROL_OWNER, "task:" + runtime.getTaskName());
-                    api->upsertChannelField(channel, ChannelField::ACTIVE_CONTROLLER, "task:" + runtime.getTaskName());
-                    api->upsertChannelField(channel, ChannelField::CONTROL_POLICY, ControlPolicy::ObserveOnly);
-                    api->upsertChannelField(channel, ChannelField::RECORD_MODE, RecordMode::OnValueChange);
-                }
+                api->upsertChannelData(channel, ChannelField::UNITS, units[index]);
+                if (!api->setChannel(handle).accepted())
+                    throw std::runtime_error("Could not establish observe-only authority for " + channel);
+                api->upsertChannelData(channel, ChannelField::RECORD_MODE, RecordMode::OnValueChange);
             }
             if (writer) for (const auto& [index, channel] : bindings) inputs.push_back(channel);
             runtime.setFixedInputChannels(inputs);
@@ -103,7 +97,7 @@ void registerRocketDriver(DARTWIC::API::SDK_API* api) {
                     state->faults[index] = api->queryChannelField(state->inputs[index], ChannelField::VALUE, 0.0);
                 const auto values = state->module->read(state->faults);
                 for (const auto& [index, channel] : state->bindings)
-                    api->upsertChannelField(channel, ChannelField::VALUE, values[index]);
+                    api->upsertChannelData(channel, ChannelField::VALUE, values[index]);
             }
         };
         task.on_end = [writer](const auto&, TaskRuntime& runtime) {
