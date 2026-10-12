@@ -7,8 +7,8 @@ void registerRocketDiscovery(DARTWIC::API::SDK_API* api);
 namespace {
 struct DriverState {
     std::shared_ptr<RocketSimModule> module;
-    std::vector<std::string> inputs;
-    std::vector<std::pair<size_t, std::string>> bindings;
+    std::vector< DARTWIC::API::FixedChannelHandle> inputs;
+    std::vector<std::pair<size_t, DARTWIC::API::FixedChannelHandle>> bindings;
     std::array<double, 5> faults{};
     std::array<double, 9> commands{};
 };
@@ -54,34 +54,28 @@ void registerRocketDriver(DARTWIC::API::SDK_API* api) {
         task.metadata.structure = TaskStructure::Periodic;
         task.metadata.default_arguments = {{"module_instance_name", "rocket_device"}, {"channel_prefix", "rocket_sim"}};
         task.on_configure = [api, writer](const auto&, TaskRuntime& runtime) {
-            moduleFor(api, runtime);
+            auto state = std::make_shared<DriverState>();
+            state->module = moduleFor(api, runtime);
             const auto args = runtime.getArguments();
             const auto prefix = args.value("channel_prefix", std::string{"rocket_sim"});
             auto inputs = writer ? std::vector<std::string>{} : RocketSimModule::inputNames(prefix, false);
             const auto bindings = writer ? bindingsFor(args, "write_mappings", RocketSimModule::writeFields, prefix)
                 : bindingsFor(args, "read_mappings", RocketSimModule::readFields, prefix);
-            for (const auto& name : inputs) api->createFixedChannel(name);
+            for (const auto& name : inputs) state->inputs.push_back(api->createFixedChannel(name));
             for (const auto& [index, channel] : bindings) {
                 const auto handle = api->createFixedChannel(channel);
+                state->bindings.emplace_back(index, handle);
                 if (writer) continue;
                 const std::array<std::string, 24> units = {"mA", "K", "K", "K", "%", "%", "kg/s", "", "", "s"};
-                api->upsertChannelData(channel, ChannelField::UNITS, units[index]);
-                if (!api->setChannel(handle).accepted())
-                    throw std::runtime_error("Could not establish observe-only authority for " + channel);
-                api->upsertChannelData(channel, ChannelField::RECORD_MODE, RecordMode::OnValueChange);
+                api->upsertChannelField(channel, ChannelField::UNITS, units[index]);
+                api->setChannel(channel);
+                api->upsertChannelField(channel, ChannelField::RECORD_MODE, RecordMode::OnValueChange);
             }
             if (writer) for (const auto& [index, channel] : bindings) inputs.push_back(channel);
             runtime.setFixedInputChannels(inputs);
-        };
-        task.on_start = [api, writer](const auto&, TaskRuntime& runtime) {
-            auto state = std::make_shared<DriverState>();
-            state->module = moduleFor(api, runtime);
-            const auto args = runtime.getArguments();
-            const auto prefix = args.value("channel_prefix", std::string{"rocket_sim"});
-            if (!writer) state->inputs = RocketSimModule::inputNames(prefix, false);
-            state->bindings = writer ? bindingsFor(args, "write_mappings", RocketSimModule::writeFields, prefix)
-                : bindingsFor(args, "read_mappings", RocketSimModule::readFields, prefix);
             runtime.setTypedRuntimeContext("rocket-driver", state);
+        };
+        task.on_start = [api, writer](const auto&, TaskRuntime&) {
             api->writeLog("Rocket device", writer ? "Write task started" : "Read task started");
         };
         task.on_task = [api, writer](const auto&, TaskRuntime& runtime, double) {
@@ -89,15 +83,16 @@ void registerRocketDriver(DARTWIC::API::SDK_API* api) {
             if (!state) throw std::runtime_error("Rocket driver has no initialized task context");
             if (writer) {
                 state->commands.fill(0);
-                for (const auto& [index, channel] : state->bindings)
-                    state->commands[index] = api->queryChannelField(channel, ChannelField::VALUE, 0.0);
+                for (const auto& [index, handle] : state->bindings)
+                    state->commands[index] = api->queryChannel(handle);
                 state->module->write(state->commands);
             } else {
                 for (size_t index = 0; index < state->inputs.size(); ++index)
-                    state->faults[index] = api->queryChannelField(state->inputs[index], ChannelField::VALUE, 0.0);
+                    state->faults[index] = api->queryChannel(state->inputs[index]);
                 const auto values = state->module->read(state->faults);
-                for (const auto& [index, channel] : state->bindings)
-                    api->upsertChannelData(channel, ChannelField::VALUE, values[index]);
+                for (const auto& [index, handle] : state->bindings)
+                    if (!api->upsertChannel(handle, values[index]))
+                        throw std::runtime_error("Rocket driver fixed-channel write was denied or its handle became stale.");
             }
         };
         task.on_end = [writer](const auto&, TaskRuntime& runtime) {

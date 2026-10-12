@@ -166,8 +166,8 @@ dark, and customized appearance. Plugin-specific utility classes must be
 included in the plugin's compiled CSS. Avoid hard-coded colors and private GUI
 class names.
 
-The expanded UI catalog requires Interface 2.1.0 or newer. Set the plugin's
-`minInterfaceVersion` to `2.1.0` when using these exports. An older host rejects
+The expanded UI catalog is part of Interface 2.0.0. Set the plugin's
+`minInterfaceVersion` to `2.0.0` when using these exports. An older host rejects
 an incompatible plugin during load; a missing host component also produces a
 named error when rendered. The generated Interface SDK reference in the DARTWIC
 documentation lists every export and its import path.

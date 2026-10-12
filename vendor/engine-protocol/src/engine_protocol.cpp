@@ -1,5 +1,6 @@
 #include <dartwic/EngineProtocol.h>
 #include <mutex>
+#include <cmath>
 #include <unordered_map>
 
 namespace DARTWIC {
@@ -41,8 +42,8 @@ struct EngineProtocol::Impl {
         { std::lock_guard lock(mutex);channels=channel_handlers;argus=argus_handlers; }
         return std::visit([&](const auto& v)->Value::Object {
             using T=std::decay_t<decltype(v)>;
-            if constexpr(std::is_same_v<T,ChannelUpsert>) { if(channels.upsert)return EngineContract::result(channels.upsert(v)); }
-            else if constexpr(std::is_same_v<T,ChannelRemove>) { if(channels.remove)return EngineContract::result(channels.remove(v)); }
+            if constexpr(std::is_same_v<T,ChannelUpsert>) { if(channels.upsert){channels.upsert(v);return {};} }
+            else if constexpr(std::is_same_v<T,ChannelRemove>) { if(channels.remove){channels.remove(v);return {};} }
             else if constexpr(std::is_same_v<T,ChannelBulkUpsert>) {
                 if(v.samples.empty()) throw TEMPEST::RemoteError("Bulk command needs samples.","invalid_arguments");
                 if(channels.bulk_upsert){channels.bulk_upsert(v);return {};}
@@ -211,14 +212,16 @@ void EngineProtocol::Logs::publishBatch(std::vector<LogEntry> entries) const {
 }
 EngineProtocol::~EngineProtocol()=default;
 void EngineProtocol::Channels::setHandlers(ChannelHandlers h)const{std::lock_guard lock(owner_->impl_->mutex);owner_->impl_->channel_handlers=std::move(h);}
-ChannelMutationResult EngineProtocol::Channels::upsert(ChannelUpsert r)const{if(r.channel.empty())throw TEMPEST::Error("Channel name is required.");return EngineContract::mutationResult(owner_->impl_->call(std::move(r)));}
-ChannelMutationResult EngineProtocol::Channels::remove(ChannelRemove r)const{if(r.channel.empty())throw TEMPEST::Error("Channel name is required.");return EngineContract::mutationResult(owner_->impl_->call(std::move(r)));}
+void EngineProtocol::Channels::upsert(ChannelUpsert r)const{if(r.channel.empty())throw TEMPEST::Error("Channel name is required.");owner_->impl_->call(std::move(r));}
+void EngineProtocol::Channels::remove(ChannelRemove r)const{if(r.channel.empty())throw TEMPEST::Error("Channel name is required.");owner_->impl_->call(std::move(r));}
 void EngineProtocol::Channels::upsertBulk(ChannelBulkUpsert r)const{if(r.channel.empty()||r.samples.empty())throw TEMPEST::Error("Bulk command needs channel and samples.");owner_->impl_->call(std::move(r));}
 ChannelQueryResult EngineProtocol::Channels::query(ChannelQuery r)const{return EngineContract::channelResult(owner_->impl_->call(std::move(r)));}
 void EngineProtocol::Channels::publishTelemetry(ChannelTelemetry t)const{owner_->impl_->publish(std::move(t));}
 void EngineProtocol::Channels::publishTelemetry(FixedGenerationTelemetry t)const{owner_->impl_->publish(std::move(t));}
 void EngineProtocol::Argus::setHandlers(ArgusHandlers h)const{std::lock_guard lock(owner_->impl_->mutex);owner_->impl_->argus_handlers=std::move(h);}
 void EngineProtocol::Argus::publishTyped(const char* type,ArgusEvent e)const{
+    if (!std::isfinite(e.separation_seconds) || e.separation_seconds < 0.0)
+        throw TEMPEST::Error("ARGUS separation_seconds must be finite and nonnegative.");
     e.type=type;owner_->impl_->prepareEvent(e);
     const auto owner=e.owner_node;
     owner_->impl_->publish(ArgusEventTelemetry{ArgusEventTelemetry::Kind::Created,owner,std::move(e),{}});
