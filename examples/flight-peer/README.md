@@ -1,6 +1,6 @@
 # Mock flight peer
 
-Start the mock rocket workspace and its engine first. This application models a flight computer; it does not model flight dynamics.
+Start the example workspace and its engine first. This application models a separate mock flight computer with simple ascent and descent telemetry.
 
 For the supplied custom connection:
 
@@ -17,7 +17,7 @@ $env:DARTWIC_PASSWORD = Read-Host 'Ground admin password' -MaskInput
 ./rocket-flight-peer.exe --transport native --host 127.0.0.1 --port 7400
 ```
 
-Expect `FLIGHT_COMPUTER:sample_counter` to advance, a flight-ready ARGUS event, and a **Flight computer** log stream. Ground can command `telemetry_rate_hz` from 1 to 20 and call `flight/set-mode` with `standby` or `test`. Flight reads ground ambient temperature and sends `rocket_sim_flight_check=1` after registration. Measurement channels reject writes.
+Expect `FLIGHT_COMPUTER:sample_counter` to advance, a flight-ready ARGUS event, and a **Flight computer** log stream. Ground can command `telemetry_rate_hz` from 1 to 20. The workspace's `rocket_launch_sequence` releases the quick disconnect then calls its pinned `flight/launch` operation; `rocket_land_sequence` calls pinned `flight/land`. The peer publishes altitude, velocity, and phase. Measurement channels reject writes.
 
 Stop with Ctrl+C. Commands while disconnected fail; after restarting, confirm new snapshots before commanding. The workspace includes the complete native and custom walkthroughs, recording instructions, and failure exercises.
 

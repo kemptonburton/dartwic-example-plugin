@@ -1,16 +1,20 @@
 import React from "../sdk/react.ts";
-import {Badge, Card, CardContent, CardHeader, CardTitle} from "../sdk/ui/general.ts";
+import {ModuleRuntimeOverview} from "../sdk/ui/dartwic.ts";
 
-export function ExampleModuleConfig() {
+const taskTypeIds = ["example_device_plugin.example_read", "example_device_plugin.example_write"];
+const resolveTaskChannels = task => {
+    const isRead = task.task_type === taskTypeIds[0];
+    const rows = task.arguments?.[isRead ? "read_mappings" : "write_mappings"] || [];
+    return rows.map(row => ({name: row.channel, label: row.device_field,
+        direction: isRead ? "output" : "input"}));
+};
+
+export function ExampleModuleConfig({instanceConfig}) {
+    const instanceName = instanceConfig?.name || "";
+    const prefix = instanceConfig?.parameters?.channel_prefix || "example_device";
     return (
-        <Card><CardHeader className="flex flex-row items-center justify-between"><CardTitle>Example module</CardTitle><Badge>Mock device</Badge></CardHeader>
-            <CardContent className="text-sm text-muted-foreground">Example module configuration body.</CardContent></Card>
+        <ModuleRuntimeOverview instanceName={instanceName} connectionChannel={`${prefix}_connected`}
+            connectionLabel="SIMULATED DEVICE" endpoint="LOCAL SIMULATION"
+            taskTypeIds={taskTypeIds} resolveTaskChannels={resolveTaskChannels} />
     );
-}
-
-export function RocketModuleConfig() {
-    return <div className="space-y-2 text-sm">
-        <p>This module simulates device registers and actuator feedback. It opens no hardware connection.</p>
-        <p>Bind Mock Rocket Read and Mock Rocket Write to this instance. Use their shared channel prefix to choose the signal namespace. Fault inputs are exposed on the rocket schematic.</p>
-    </div>;
 }

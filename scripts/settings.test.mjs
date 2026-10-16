@@ -49,6 +49,8 @@ test('invalid settings do not write and host errors propagate', async () => {
     const {client, calls} = fixture();
     for (const value of [-1, 7, 1.5, '2', null]) assert.throws(() => client.save({decimal_places: value}, 'rev'), /Decimal places/);
     assert.throws(() => client.save({show_units: 'false'}, 'rev'), /Show units/);
+    assert.throws(() => client.save({resource_title: ''}, 'rev'), /Resource title/);
+    assert.throws(() => client.save({resource_title: 'x'.repeat(61)}, 'rev'), /Resource title/);
     assert.throws(() => client.save({run_label: 'old'}, 'rev'), /Unknown/);
     assert.equal(calls.length, 0);
     const failing = exampleSettings(async () => ({error: true, payload: {error: 'Settings changed; reload.'}}), 'rocket-test');
@@ -60,6 +62,7 @@ test('defaults fill missing write-response fields without losing zero or false',
     const settings = displaySettings({effective: {plugins: {[pluginId]: {display: {decimal_places: 0, show_units: false}}}}});
     assert.equal(formatSample(1234.56789, 'm', settings), '1235');
     assert.equal(formatSample(18.76543, 'bar', displayDefaults), '18.77 bar');
+    assert.equal(settings.resource_title, 'Engine test telemetry');
 });
 
 test('opening captures the active project before a delayed save', async () => {

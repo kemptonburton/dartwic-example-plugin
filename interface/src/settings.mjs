@@ -1,7 +1,7 @@
 import {createStorageClient} from '../sdk/storage/client.js';
 
 export const pluginId = 'example_device_plugin';
-export const displayDefaults = {decimal_places: 2, show_units: true};
+export const displayDefaults = {decimal_places: 2, show_units: true, resource_title: 'Engine test telemetry'};
 export const settingsDefaults = {plugins: {[pluginId]: {display: displayDefaults}}};
 export const displayPointers = Object.keys(displayDefaults).map(key => `/plugins/${pluginId}/display/${key}`);
 
@@ -12,6 +12,9 @@ export function validateDisplayPatch(patch) {
             if (!Number.isInteger(value) || value < 0 || value > 6) throw new Error('Decimal places must be an integer from 0 to 6.');
         } else if (key === 'show_units') {
             if (typeof value !== 'boolean') throw new Error('Show units must be true or false.');
+        } else if (key === 'resource_title') {
+            if (typeof value !== 'string' || !value.trim() || value.length > 60)
+                throw new Error('Resource title must be 1 to 60 characters.');
         } else throw new Error(`Unknown display setting: ${key}`);
     }
     return patch;

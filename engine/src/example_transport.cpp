@@ -6,6 +6,7 @@
 #include <condition_variable>
 #include <deque>
 #include <future>
+#include <iostream>
 #include <mutex>
 #include <thread>
 
@@ -41,9 +42,14 @@ struct ExampleTransport::Impl {
                 { std::lock_guard lock(mutex); pending.swap(outgoing); }
                 for (auto& m : pending) {
                     if (m.deadline < std::chrono::steady_clock::now()) continue;
-                    nlohmann::json record{{"kind", static_cast<int>(m.kind)}, {"id", m.request_id},
-                        {"name", m.name}, {"payload", TEMPEST::Json::fromValue(TEMPEST::Value{m.payload})},
-                        {"error", m.error}, {"code", m.error_code}};
+                    nlohmann::json record;
+                    try {
+                        record = {{"kind", static_cast<int>(m.kind)}, {"id", m.request_id},
+                            {"name", m.name}, {"payload", TEMPEST::Json::fromValue(TEMPEST::Value{m.payload})},
+                            {"error", m.error}, {"code", m.error_code}};
+                    } catch (const std::exception& error) {
+                        throw TEMPEST::Error("Cannot encode custom frame `" + m.name + "`: " + error.what());
+                    }
                     const auto body = record.dump();
                     if (body.size() > 1024*1024) throw TEMPEST::Error("Example frame exceeds 1 MiB");
                     std::string frame(4, '\0');
@@ -81,9 +87,21 @@ struct ExampleTransport::Impl {
                 }
                 std::unique_lock lock(mutex); wake.wait_for(lock, std::chrono::milliseconds(2));
             }
+        } catch (const std::exception& error) {
+            if (!started) ready.set_exception(std::current_exception());
+            else {
+                std::cerr << "Custom flight link stopped: " << error.what() << std::endl;
+                if (callbacks.on_state) callbacks.on_state(TEMPEST::ConnectionState::Disconnected,
+                    std::string("Custom link failed: ") + error.what());
+            }
+            running = false;
         } catch (...) {
             if (!started) ready.set_exception(std::current_exception());
-            else if (callbacks.on_state) callbacks.on_state(TEMPEST::ConnectionState::Disconnected, "Custom link failed");
+            else {
+                std::cerr << "Custom flight link stopped: unknown error" << std::endl;
+                if (callbacks.on_state) callbacks.on_state(TEMPEST::ConnectionState::Disconnected,
+                    "Custom link failed with an unknown error");
+            }
             running = false;
         }
     }

@@ -1,6 +1,6 @@
 # Example Plugin 2.0.2
 
-- Replaced run labels and the location selector with decimal precision and unit display settings, plus a sample telemetry preview.
+- Replaced run labels and the location selector with decimal precision, unit display, and a resource title for live example device readings.
 - Project overrides autosave after 500 ms through the storage helpers; there is no Save button.
 - Field patches merge, writes serialize, revisions protect concurrent edits, and closing the panel flushes accepted changes to the captured project.
 - Validation and unsaved errors remain visible, including SDK notifications after the panel closes.

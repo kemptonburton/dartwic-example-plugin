@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import vm from "node:vm";
+import {INTERFACE_PLUGIN_HOST_VERSION} from "../interface/sdk/internal/versions.ts";
 
 import {verifySdkLock} from "./plugin-sdk-lock.mjs";
 import {
@@ -26,6 +27,9 @@ async function materializeInterfacePlugin(pluginId, runtimePath) {
   const registration = sandbox.window.__dartwicPluginRegistry__?.[pluginId];
   if (!registration || typeof registration.createPlugin !== "function") {
     throw new Error(`Packaged interface runtime did not register '${pluginId}'.`);
+  }
+  if (registration.internalHostVersion !== INTERFACE_PLUGIN_HOST_VERSION) {
+    throw new Error(`Packaged interface runtime uses host version ${registration.internalHostVersion ?? "missing"}; expected ${INTERFACE_PLUGIN_HOST_VERSION}.`);
   }
   const stylesheet = elements.get(`dartwic-plugin-style-${pluginId}`)?.textContent ?? "";
   if (!stylesheet.includes(".max-w-xl") || !stylesheet.includes("var(--card)")) {

@@ -8,8 +8,9 @@ created: 2026-10-05T15:38
 
 The public [example plugin](https://github.com/kemptonburton/dartwic-example-plugin)
 includes a working autosaved settings panel: **Decimal places** controls numeric
-precision and **Show units** controls unit suffixes. Both affect the sample
-telemetry preview and the Example Telemetry resource when it opens. They do not
+precision, **Show units** controls unit suffixes, and **Resource title** names
+the Example Telemetry resource. The open resource updates when a setting is saved
+and shows live values from the example device read/write task bindings. They do not
 change device sampling or commands. There is no Save button or location selector:
 the plugin chooses project scope because this example configures a shared
 project resource, not the operator's personal Interface preferences.

@@ -1,22 +1,15 @@
 import React from '../sdk/react.ts';
 import {Button, Input, Label, Switch} from '../sdk/ui/general.ts';
-import {formatSample} from './settings.mjs';
 import {useDisplaySettings} from './useDisplaySettings.jsx';
-
-export function TelemetryPreview({settings}) {
-    return <dl className="grid max-w-md grid-cols-2 gap-x-6 gap-y-2 text-sm">
-        <dt className="text-muted-foreground">Altitude</dt>
-        <dd className="text-right font-mono tabular-nums">{formatSample(1234.56789, 'm', settings)}</dd>
-        <dt className="text-muted-foreground">Tank pressure</dt>
-        <dd className="text-right font-mono tabular-nums">{formatSample(18.76543, 'bar', settings)}</dd>
-    </dl>;
-}
 
 export function ExamplePluginSettings({operation}) {
     const settings = useDisplaySettings(operation);
     const [precision, setPrecision] = React.useState('2');
+    const [resourceTitle, setResourceTitle] = React.useState('Engine test telemetry');
     const [invalid, setInvalid] = React.useState(false);
+    const [invalidTitle, setInvalidTitle] = React.useState(false);
     React.useEffect(() => {setPrecision(String(settings.values.decimal_places)); setInvalid(false);}, [settings.values.decimal_places, settings.loaded]);
+    React.useEffect(() => {setResourceTitle(settings.values.resource_title); setInvalidTitle(false);}, [settings.values.resource_title, settings.loaded]);
     const changePrecision = event => {
         const text = event.target.value;
         setPrecision(text);
@@ -38,14 +31,26 @@ export function ExamplePluginSettings({operation}) {
             <Switch id="example-show-units" checked={settings.values.show_units} disabled={!settings.loaded || !!settings.error}
                 onCheckedChange={value => settings.edit({show_units: value})}/>
         </div>
+        <div className="max-w-md space-y-1.5">
+            <Label htmlFor="example-resource-title">Resource title</Label>
+            <Input id="example-resource-title" maxLength={60} value={resourceTitle} aria-invalid={invalidTitle}
+                disabled={!settings.loaded || !!settings.error}
+                onChange={event => {
+                    const value = event.target.value;
+                    setResourceTitle(value);
+                    setInvalidTitle(!value.trim());
+                    if (value.trim()) settings.edit({resource_title: value});
+                    else settings.discardField('resource_title');
+                }} onBlur={settings.flush}/>
+        </div>
         <div className="border-t border-border pt-4">
-            <h3 className="mb-3 text-xs text-muted-foreground">Sample telemetry</h3>
-            <TelemetryPreview settings={settings.values}/>
+            <p className="text-xs text-muted-foreground">Open Example Telemetry to see these saved settings applied to live values from the example device tasks.</p>
         </div>
         <div role="status" aria-live="polite" className="text-xs text-muted-foreground">
-            {settings.error ? 'Not saved' : !settings.loaded ? 'Loading...' : invalid ? 'Invalid value' : settings.saving ? 'Saving...' : settings.pending ? 'Pending...' : 'Saved'}
+            {settings.error ? 'Not saved' : !settings.loaded ? 'Loading...' : invalid || invalidTitle ? 'Invalid value' : settings.saving ? 'Saving...' : settings.pending ? 'Pending...' : 'Saved'}
         </div>
         {invalid ? <div role="alert" className="text-red">Enter a whole number from 0 to 6.</div> : null}
+        {invalidTitle ? <div role="alert" className="text-red">Enter a resource title.</div> : null}
         {settings.error ? <div role="alert" className="space-y-2 text-red">
             <div>{settings.error}</div>
             <Button variant="outline" onClick={settings.reload} disabled={settings.saving}>Reload settings</Button>

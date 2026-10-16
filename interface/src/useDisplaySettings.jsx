@@ -28,6 +28,7 @@ export function useDisplaySettings(operation) {
             autosave = createSettingsAutosave(async patch => {
                 const saved = await storage.save(patch, revision);
                 revision = saved.revision;
+                window.dispatchEvent(new Event('dartwic:example-settings-changed'));
             }, {onState: report});
             controller.current = autosave;
             setValues(displaySettings(snapshot));

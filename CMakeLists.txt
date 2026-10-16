@@ -62,11 +62,13 @@ target_include_directories(example_device_plugin_engine PRIVATE
 
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(cppzmq CONFIG REQUIRED)
+find_package(Threads REQUIRED)
 
 target_link_libraries(example_device_plugin_engine PRIVATE
         nlohmann_json::nlohmann_json)
 target_link_libraries(example_device_plugin_engine PRIVATE
         TEMPEST::Peer
+        Threads::Threads
         cppzmq
         DARTWIC::EngineProtocol)
 

@@ -1,9 +1,9 @@
 import {definePlugin} from "../sdk/index.ts";
-import {ExampleModuleConfig, RocketModuleConfig} from "./moduleConfigs.jsx";
+import {ExampleModuleConfig} from "./moduleConfigs.jsx";
 import {ExamplePluginSettings} from "./pluginSettings.jsx";
 import {ExampleResource, ExampleSchematicNode} from "./resourcesAndSchematics.jsx";
-import {ExampleTaskCard} from "./taskCards.jsx";
-import {ExampleTaskConfig, taskConfigs, RocketDriverTaskConfig} from "./taskConfigs.jsx";
+import {ExampleDeviceTaskConfig} from "./taskConfigs.jsx";
+import {StressTaskConfig, StressModuleConfig} from "./stressTaskConfigs.jsx";
 import React from "../sdk/react.ts";
 
 function ExampleDeviceIcon(props) {
@@ -15,51 +15,31 @@ function ExampleDeviceIcon(props) {
     );
 }
 
-function ExampleNotesIcon(props) {
-    return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
-            <path d="M6 3h9l3 3v15H6z"/>
-            <path d="M15 3v4h4M9 12h6M9 16h6"/>
-        </svg>
-    );
-}
-
 export default definePlugin({
     id: "example_device_plugin",
     name: "Example Device Plugin",
     register(registry) {
-        for (const id of ["rocket_read", "rocket_write"]) registry.addTaskUi({
-            id, name: id === "rocket_read" ? "Mock Rocket Read" : "Mock Rocket Write", editor: RocketDriverTaskConfig,
-        });
-        registry.addModuleUi({id: "rocket_sim", name: "Mock Rocket Device", icon: ExampleDeviceIcon, panel: RocketModuleConfig});
-        registry.addTaskUi({
-            id: "example_task",
-            name: "Example Task UI",
-            card: ExampleTaskCard,
-            editor: ExampleTaskConfig,
-        });
-        registry.addTaskUi({
-            id: "mock_read",
-            name: "Mock Device Read",
-            editor: taskConfigs[0].component,
-        });
-        registry.addTaskUi({
-            id: "mock_write",
-            name: "Mock Device Write",
-            editor: taskConfigs[1].component,
+        for (const id of ["stress_read", "stress_write"]) registry.addTaskUi({id, name: id === "stress_read" ? "Stress Device Read" : "Stress Device Write", editor: StressTaskConfig});
+        registry.addModuleUi({id: "stress_device", name: "Stress Device", icon: ExampleDeviceIcon, panel: StressModuleConfig});
+        for (const id of ["example_read", "example_write"]) registry.addTaskUi({
+            id, name: id === "example_read" ? "Example Device Read" : "Example Device Write", editor: ExampleDeviceTaskConfig,
         });
         registry.addModuleUi({
             id: "example_device",
             name: "Example Device",
             icon: ExampleDeviceIcon,
             panel: ExampleModuleConfig,
+            connection: ({instanceConfig}) => ({
+                channel: `${instanceConfig?.parameters?.channel_prefix || "example_device"}_connected`,
+                label: "Example Device", endpoint: "LOCAL SIMULATION", connectedValue: 1,
+            }),
         });
         registry.addResource({
             id: "example_notes",
             name: "Example Telemetry",
             label: "Example Telemetry",
             type: "component",
-            icon: ExampleNotesIcon,
+            icon: ExampleDeviceIcon,
             component: ExampleResource,
             show_in_resource_tabs: true,
         });

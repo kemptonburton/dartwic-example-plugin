@@ -2,6 +2,7 @@
 #include <tempest/JsonValue.h>
 #include <dartwic/EngineProtocol.h>
 #include "example_transport.h"
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <csignal>
@@ -58,11 +59,17 @@ int main(int argc, char** argv) {
         TEMPEST::Peer peer({.node_name="FLIGHT_COMPUTER",
             .peer_id=transport == "native" ? "tempest.engine" : "example_device_plugin.example_flight_link",
             .protocol_id="tempest.engine", .protocol_version=DARTWIC::EngineContract::version}, link);
+        std::atomic<bool> transport_failed{false};
+        if (transport == "custom") peer.onStateChanged([&](TEMPEST::ConnectionState state, std::string reason) {
+            if (state == TEMPEST::ConnectionState::Disconnected && reason.starts_with("Custom link failed"))
+                transport_failed = true;
+        });
         DARTWIC::EngineProtocol protocol(peer);
         std::mutex mutex;
-        std::atomic<double> rate{5}, ambient{295};
+        std::atomic<double> rate{5}, altitude{0}, velocity{0};
+        std::atomic<int> flight_phase{0}; // 0 pad, 1 ascent, 2 descent, 3 landed
+        std::atomic<bool> ground_qd_released{false};
         std::atomic<uint64_t> counter{0}, ground_snapshots{0};
-        std::string mode = "standby";
         std::deque<DARTWIC::LogEntry> history;
         uint64_t sequence = 0;
         const auto log = [&](const std::string& text) {
@@ -84,7 +91,10 @@ int main(int argc, char** argv) {
             add("battery_voltage", 24.0 + std::sin(counter.load()*0.01)*0.2, "V");
             add("sample_counter", counter.load(), "samples");
             add("telemetry_rate_hz", rate.load(), "Hz", true);
-            add("ground_ambient", ambient.load(), "K");
+            add("altitude_m", altitude.load(), "m");
+            add("velocity_mps", velocity.load(), "m/s");
+            add("flight_phase", flight_phase.load(), "state");
+            add("ground_qd_released", ground_qd_released.load() ? 1 : 0, "");
             add("ground_snapshot_counter", ground_snapshots.load(), "snapshots");
             return result;
         };
@@ -103,17 +113,17 @@ int main(int argc, char** argv) {
             if (value < 1 || value > 20) throw TEMPEST::RemoteError("Telemetry rate must be 1 through 20 Hz", "invalid_argument");
             rate = value;
             log("Ground commanded telemetry rate: " + std::to_string(value) + " Hz");
-            return DARTWIC::ChannelMutationResult{DARTWIC::ChannelMutationState::Accepted};
         };
         channels.snapshot = [&](const DARTWIC::ChannelSnapshotTelemetry& snapshot) {
             if (++ground_snapshots == 1) log("Received first ground channel snapshot");
-            if (const auto entry = snapshot.channels.find("rocket_sim_ground_ambient"); entry != snapshot.channels.end()) {
+            if (const auto entry = snapshot.channels.find("rocket_qd_released"); entry != snapshot.channels.end()) {
                 const auto data = entry->second.object();
-                if (const auto v = data.find("value"); v != data.end()) ambient = number(v->second);
+                if (const auto v = data.find("value"); v != data.end()) ground_qd_released = number(v->second) == 1;
             }
         };
         channels.telemetry = [&](const DARTWIC::ChannelTelemetry& update) {
-            if (update.kind == DARTWIC::ChannelTelemetry::Kind::Upsert && update.upsert.channel == "rocket_sim_ground_ambient") ambient = number(update.upsert.value);
+            if (update.kind == DARTWIC::ChannelTelemetry::Kind::Upsert && update.upsert.channel == "rocket_qd_released")
+                ground_qd_released = number(update.upsert.value) == 1;
         };
         protocol.channels().setHandlers(std::move(channels));
         protocol.logs().setHandlers({
@@ -132,7 +142,8 @@ int main(int argc, char** argv) {
         });
         DARTWIC::ArgusEvent event{.event_id="flight-link-ready", .title="Mock flight computer ready",
             .description="The standalone flight peer completed registration. Its channels, operations and log stream are available.",
-            .owner_node="FLIGHT_COMPUTER", .timestamp=timestamp(), .channels={"FLIGHT_COMPUTER:battery_voltage"}};
+            .owner_node="FLIGHT_COMPUTER", .timestamp=timestamp(), .channels={"FLIGHT_COMPUTER:battery_voltage"},
+            .separation_seconds=0.0};
         protocol.argus().setHandlers({
             .query=[&](const auto&) { std::lock_guard lock(mutex); return DARTWIC::ArgusQueryResult{{event},1,1}; },
             .action=[&](const DARTWIC::ArgusAction& action) {
@@ -144,15 +155,23 @@ int main(int argc, char** argv) {
                 return DARTWIC::ArgusActionResult{event.event_id,{{"status",event.status}}};
             }
         });
-        peer.registerOperation({.name="flight/set-mode", .display_name="Set mock flight mode",
-            .description="Apply a mode to the simulated flight computer and log it.", .category="Mock flight computer",
-            .arguments={{.name="mode",.type="string",.description="standby or test",.required=true}}},
-            [&](const TEMPEST::Value::Object& arguments) {
-                const auto value=arguments.at("mode").string();
-                if (value!="standby" && value!="test") throw TEMPEST::RemoteError("Choose standby or test", "invalid_argument");
-                { std::lock_guard lock(mutex); mode=value; }
-                log("Mode applied: " + value);
-                return TEMPEST::Value::Object{{"applied_mode",value}};
+        peer.registerOperation({.name="flight/launch", .display_name="Launch mock rocket",
+            .description="Launch after the ground quick disconnect is released.", .category="Flight computer"},
+            [&](const TEMPEST::Value::Object&) {
+                if (!ground_qd_released.load()) throw TEMPEST::RemoteError("Ground quick disconnect is still attached", "failed_precondition");
+                const auto phase = flight_phase.load();
+                if (phase != 0 && phase != 3) throw TEMPEST::RemoteError("Rocket is already in flight", "failed_precondition");
+                altitude = 0; velocity = 0; flight_phase = 1;
+                log("Launch command accepted; mock rocket ascending");
+                return TEMPEST::Value::Object{{"flight_phase", "ascent"}};
+            });
+        peer.registerOperation({.name="flight/land", .display_name="Land mock rocket",
+            .description="Begin the mock rocket landing sequence.", .category="Flight computer"},
+            [&](const TEMPEST::Value::Object&) {
+                if (flight_phase.load() != 1) throw TEMPEST::RemoteError("Rocket is not ascending", "failed_precondition");
+                flight_phase = 2;
+                log("Land command accepted; mock rocket descending");
+                return TEMPEST::Value::Object{{"flight_phase", "descent"}};
             });
         std::signal(SIGINT,stop); std::signal(SIGTERM,stop);
         peer.start();
@@ -161,22 +180,31 @@ int main(int argc, char** argv) {
         auto last_snapshot=start;
         bool connected=false;
         std::string remote_session;
-        while (running && (!seconds || std::chrono::steady_clock::now()-start<std::chrono::seconds(seconds))) {
+        while (running && !transport_failed && (!seconds || std::chrono::steady_clock::now()-start<std::chrono::seconds(seconds))) {
             ++counter;
             const bool ready=peer.ready();
             if (ready && (!connected || remote_session!=peer.remoteSession())) {
                 remote_session=peer.remoteSession();
                 log("Ground registration ready: " + peer.remoteNode());
                 { std::lock_guard lock(mutex); protocol.argus().publishTelemetry({.owner_node="FLIGHT_COMPUTER", .event=event}); }
-                try {
-                    DARTWIC::ChannelUpsert command{peer.remoteNode(),"rocket_sim_flight_check","value",1};
-                    protocol.channels().upsert(std::move(command));
-                    log("Flight to ground command acknowledged: rocket_sim_flight_check=1");
-                } catch(const std::exception& error) { log(std::string("Ground command failed: ")+error.what()); }
             }
-            if (!ready && connected) std::cout << "Ground disconnected; pending commands fail and telemetry is best effort" << std::endl;
+            if (!ready && connected) {
+                ground_qd_released = false;
+                std::cout << "Ground disconnected; pending commands fail and telemetry is best effort" << std::endl;
+            }
             connected=ready;
             const auto now=std::chrono::steady_clock::now();
+            if (flight_phase == 1) {
+                const double speed = std::min(150.0, velocity.load() + 1.5);
+                velocity = speed;
+                altitude = altitude.load() + speed * 0.05;
+            } else if (flight_phase == 2) {
+                const double speed = std::max(-35.0, velocity.load() - 2.0);
+                velocity = speed;
+                const double height = std::max(0.0, altitude.load() + speed * 0.05);
+                altitude = height;
+                if (height == 0) { velocity = 0; flight_phase = 3; log("Mock rocket landed"); }
+            }
             if (ready && std::chrono::duration<double>(now-last_snapshot).count()>=1/rate.load()) {
                 TEMPEST::Value::Object records;
                 for (const auto& record:snapshots()) records[record.channel]=record.channel_data;
@@ -194,5 +222,6 @@ int main(int argc, char** argv) {
             std::this_thread::sleep_for(50ms); // Acquisition counter advances at 20 Hz; delivery defaults to 5 Hz.
         }
         peer.stop();
+        if (transport_failed) return 1;
     } catch(const std::exception& error) { std::cerr << error.what() << std::endl; return 1; }
 }
