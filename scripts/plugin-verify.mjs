@@ -11,6 +11,7 @@ import {
   pluginManifestPath,
   readJson,
   validatePluginManifest,
+  validateStandalonePackageDependencies,
 } from "./plugin-utils.mjs";
 
 async function materializeInterfacePlugin(pluginId, runtimePath) {
@@ -41,6 +42,7 @@ async function materializeInterfacePlugin(pluginId, runtimePath) {
 async function main() {
   await verifySdkLock();
   const packageJson = await readJson(packageJsonPath);
+  validateStandalonePackageDependencies(packageJson);
   const scripts = packageJson?.scripts ?? {};
   for (const [name, command] of Object.entries(scripts)) {
     if (typeof command !== "string") {

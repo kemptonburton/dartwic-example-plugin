@@ -2,24 +2,7 @@ import React from "../sdk/react.ts";
 import {useTaskConfigBridge} from "../sdk/tasks/index.ts";
 import {Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "../sdk/ui/general.ts";
 import {ChannelComboBox, convertChannelReferenceToChannelName, TaskBindingTable} from "../sdk/ui/dartwic.ts";
-
-const EXAMPLE_READ_FIELDS = [
-    "pressure_current_ma", "temperature_1", "temperature_2", "temperature_3",
-    "flow", "connected", "sensor_valid", "sample_age_s",
-    "igniter_applied", "sample_counter", "fuel_position", "oxidizer_position",
-    "fill_position", "vent_position", "fuel_open_applied", "fuel_close_applied",
-    "oxidizer_open_applied", "oxidizer_close_applied", "fill_open_applied",
-    "fill_close_applied", "vent_open_applied", "vent_close_applied"
-];
-const EXAMPLE_WRITE_FIELDS = [
-    "fuel_open_coil", "fuel_close_coil", "oxidizer_open_coil", "oxidizer_close_coil",
-    "fill_open_coil", "fill_close_coil", "vent_open_coil", "vent_close_coil", "igniter_command"
-];
-
-function exampleMappings(saved, fields, prefix) {
-    return Array.isArray(saved) ? saved.map(row => ({device_field: row.device_field || "", channel: row.channel || ""}))
-        : fields.map(device_field => ({device_field, channel: `${prefix}_${device_field}`}));
-}
+import {EXAMPLE_READ_FIELDS, EXAMPLE_WRITE_FIELDS, exampleMappings} from "./deviceBindings.mjs";
 
 export function ExampleDeviceTaskConfig({task, operation, onSaved, onClose, taskEditor}) {
     const args = task.arguments || {};

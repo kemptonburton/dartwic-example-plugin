@@ -1,6 +1,7 @@
 import React from "../sdk/react.ts";
 import {useDartwic, useDartwicChannelValues} from "../sdk/hooks/index.ts";
 import {displayDefaults, displaySettings, formatSample, openExampleSettings} from "./settings.mjs";
+import {exampleTaskMappings} from "./deviceBindings.mjs";
 import {
     Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle,
     Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
@@ -43,7 +44,7 @@ export function ExampleResource({setIsLoaded}) {
                 const read = tasks.find(task => task.task_type === 'example_device_plugin.example_read');
                 const write = tasks.find(task => task.task_type === 'example_device_plugin.example_write'
                     && task.arguments?.module_instance_name === read?.arguments?.module_instance_name);
-                const rows = [...(read?.arguments?.read_mappings || []), ...(write?.arguments?.write_mappings || [])];
+                const rows = [...exampleTaskMappings(read), ...exampleTaskMappings(write)];
                 if (active) {
                     setModuleName(read?.arguments?.module_instance_name || '');
                     setBindings({...Object.fromEntries(rows.map(row => [row.device_field, row.channel])),
