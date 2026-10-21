@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import vm from "node:vm";
+import {INTERFACE_PLUGIN_HOST_VERSION} from "../interface/sdk/internal/versions.ts";
 
 import {verifySdkLock} from "./plugin-sdk-lock.mjs";
 import {
@@ -10,10 +11,17 @@ import {
   pluginManifestPath,
   readJson,
   validatePluginManifest,
+  validateStandalonePackageDependencies,
 } from "./plugin-utils.mjs";
 
 async function materializeInterfacePlugin(pluginId, runtimePath) {
-  const sandbox = {window: {}, console};
+  const elements = new Map();
+  const document = {
+    getElementById: (id) => elements.get(id) ?? null,
+    createElement: () => ({id: "", textContent: ""}),
+    head: {appendChild(element) { elements.set(element.id, element); }},
+  };
+  const sandbox = {window: {}, document, console};
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(await fs.readFile(runtimePath, "utf8"), sandbox, {filename: runtimePath});
@@ -21,12 +29,20 @@ async function materializeInterfacePlugin(pluginId, runtimePath) {
   if (!registration || typeof registration.createPlugin !== "function") {
     throw new Error(`Packaged interface runtime did not register '${pluginId}'.`);
   }
+  if (registration.internalHostVersion !== INTERFACE_PLUGIN_HOST_VERSION) {
+    throw new Error(`Packaged interface runtime uses host version ${registration.internalHostVersion ?? "missing"}; expected ${INTERFACE_PLUGIN_HOST_VERSION}.`);
+  }
+  const stylesheet = elements.get(`dartwic-plugin-style-${pluginId}`)?.textContent ?? "";
+  if (!stylesheet.includes(".max-w-xl") || !stylesheet.includes("var(--card)")) {
+    throw new Error(`Packaged interface runtime did not include theme-aware plugin styles for '${pluginId}'.`);
+  }
   return registration.createPlugin({React: {}});
 }
 
 async function main() {
   await verifySdkLock();
   const packageJson = await readJson(packageJsonPath);
+  validateStandalonePackageDependencies(packageJson);
   const scripts = packageJson?.scripts ?? {};
   for (const [name, command] of Object.entries(scripts)) {
     if (typeof command !== "string") {

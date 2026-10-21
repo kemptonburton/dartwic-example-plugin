@@ -1,32 +1,76 @@
 import {definePlugin} from "../sdk/index.ts";
+import {ExampleModuleConfig} from "./moduleConfigs.jsx";
+import {ExamplePluginSettings} from "./pluginSettings.jsx";
+import {ExampleResource, ExampleSchematicNode} from "./resourcesAndSchematics.jsx";
+import {ExampleDeviceTaskConfig} from "./taskConfigs.jsx";
+import {StressTaskConfig, StressModuleConfig} from "./stressTaskConfigs.jsx";
 import React from "../sdk/react.ts";
-import {EthercatModuleConfig} from "./moduleConfigs.jsx";
-import {EthercatTaskCard} from "./taskCards.jsx";
-import {EthercatTaskConfig} from "./taskConfigs.jsx";
 
-function EthercatIcon(props) {
-    return <svg viewBox="0 0 24 24" role="img" aria-label="EtherCAT" {...props}>
-        <path fill="#e63032" d="M2 4h13V1l7 5.5-7 5.5V9H2z"/>
-        <path fill="currentColor" d="M22 15H9v-3l-7 5.5L9 23v-3h13z"/>
-    </svg>;
+function ExampleDeviceIcon(props) {
+    return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+            <rect x="3" y="6" width="18" height="13" rx="2"/>
+            <path d="M8 3v3M16 3v3M8 11h8M8 15h4"/>
+        </svg>
+    );
+}
+
+function ModuleIcon(props) {
+    return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+            <path d="m7.5 4.27 9 5.15"/>
+            <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
+            <path d="m3.3 7 8.7 5 8.7-5"/>
+            <path d="M12 22V12"/>
+        </svg>
+    );
 }
 
 export default definePlugin({
-    id: "ethercat",
-    name: "EtherCAT",
+    id: "example_device_plugin",
+    name: "Example Device Plugin",
     register(registry) {
-        registry.addTaskUi({id: "cycle", name: "EtherCAT Cyclic I/O", card: EthercatTaskCard, editor: EthercatTaskConfig});
+        for (const id of ["stress_read", "stress_write"]) registry.addTaskUi({id, name: id === "stress_read" ? "Stress Device Read" : "Stress Device Write", editor: StressTaskConfig});
+        registry.addModuleUi({id: "stress_device", name: "Stress Device", icon: ExampleDeviceIcon, panel: StressModuleConfig});
+        for (const id of ["example_read", "example_write"]) registry.addTaskUi({
+            id, name: id === "example_read" ? "Example Device Read" : "Example Device Write", editor: ExampleDeviceTaskConfig,
+        });
         registry.addModuleUi({
-            id: "master",
-            name: "EtherCAT Master",
-            icon: EthercatIcon,
-            panel: EthercatModuleConfig,
+            id: "example_device",
+            name: "Example Device",
+            icon: ModuleIcon,
+            panel: ExampleModuleConfig,
             connection: ({instanceConfig}) => ({
-                channel: `${instanceConfig.name}.info.connected`,
-                label: "EtherCAT Master",
-                endpoint: instanceConfig.parameters?.adapter || "NO ADAPTER",
-                connectedValue: 1,
+                channel: `${instanceConfig?.parameters?.channel_prefix || "example_device"}_connected`,
+                label: "Example Device", endpoint: "LOCAL SIMULATION", connectedValue: 1,
             }),
+        });
+        registry.addResource({
+            id: "example_notes",
+            name: "Example Telemetry",
+            label: "Example Telemetry",
+            type: "component",
+            icon: ExampleDeviceIcon,
+            component: ExampleResource,
+            show_in_resource_tabs: true,
+        });
+        registry.addSchematicNode({
+            id: "example_indicator",
+            name: "Example Indicator",
+            component: ExampleSchematicNode,
+            dataDefaults: {label: "Example"},
+            palette: {
+                defaults: {
+                    width: 160,
+                    height: 72,
+                },
+            },
+            resizable: true,
+        });
+        registry.addSettingsPanel({
+            id: "general",
+            name: "Example Settings",
+            component: ExamplePluginSettings,
         });
     },
 });

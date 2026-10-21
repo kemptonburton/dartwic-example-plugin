@@ -220,6 +220,8 @@ async function main() {
     } else {
       await buildEngine(pluginId);
       await verifyEngineOutput(pluginId);
+      await buildEngineDebug(pluginId);
+      await verifyEngineDebugOutput(pluginId);
     }
   }
 

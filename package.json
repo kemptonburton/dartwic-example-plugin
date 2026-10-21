@@ -4,6 +4,7 @@
   "version": "2.0.0",
   "type": "module",
   "scripts": {
+    "test": "node --test scripts/settings.test.mjs scripts/package-metadata.test.mjs scripts/device-bindings.test.mjs",
     "build": "node build.mjs",
     "build:bridge": "node ./scripts/plugin-bridge.mjs",
     "build:interface": "node build.mjs",
@@ -20,6 +21,9 @@
     "deploy:interface": "node ./scripts/plugin-deploy.mjs --interface"
   },
   "devDependencies": {
-    "esbuild": "^0.25.0"
+    "esbuild": "^0.25.0",
+    "postcss": "^8.4.48",
+    "tailwindcss": "^3.4.14",
+    "tailwindcss-animate": "^1.0.7"
   }
 }

@@ -1,0 +1,5 @@
+{
+  "node_name": "external-program",
+  "receive_endpoint": "tcp://127.0.0.1:17600",
+  "send_endpoint": "tcp://127.0.0.1:17601"
+}

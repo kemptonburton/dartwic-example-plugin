@@ -1,11 +1,31 @@
-# EtherCAT 0.1.1
+# Example Plugin 2.0.2
 
-- Refreshed the bundled Engine and Interface SDK snapshots, including settings, shared assets, and Markdown helpers.
-- Rebuilt the Windows x64 engine plugin, KickCAT C bridge, and interface bundle.
-- Verified bundled source locks and materialized the packaged interface registry.
-- Included the development branch's discovery ownership and quiet interface logging fixes.
+- Replaced run labels and the location selector with decimal precision, unit display, and a resource title for live example device readings.
+- Project overrides autosave after 500 ms through the storage helpers; there is no Save button.
+- Field patches merge, writes serialize, revisions protect concurrent edits, and closing the panel flushes accepted changes to the captured project.
+- Validation and unsaved errors remain visible, including SDK notifications after the panel closes.
+- Added thirteen tests and a handwritten autosave walkthrough in the storage/settings guide.
+- Engine and Interface minimum versions remain 2.0.0; both Windows binary variants are included.
 
-This SDK refresh targets the current DARTWIC 2.0 development host. Install Npcap
-and use a dedicated EtherCAT adapter as described in README. This
-release was build/package tested, not exercised against a live slave chain. No
-Linux binary or timing guarantee is included in this Windows release.
+## Example Plugin 2.0.1
+
+- Windows packages include both Release (`plugin/engine/`) and Debug (`plugin/engine-debug/`) binaries, so development Debug Engines can install the example too.
+- The installer chooses the matching variant; Debug and Release C++ runtimes are not interchangeable.
+- Engine and Interface minimum versions remain 2.0.0.
+
+## Example Plugin 2.0.0
+
+- Stable release for DARTWIC 2.0.0, with Engine and Interface minimums of 2.0.0.
+- Bundles the matching 2.0.0 SDK and Engine Protocol sources with verified snapshot hashes.
+- Core Engine and Interface downloads will be published separately.
+
+## Included Changes
+
+- Refreshed the bundled Engine and Interface SDKs, including scoped settings and shared asset helpers.
+- Replaced the placeholder settings panel with a working run-label setting. Workspace/project writes retain the revision; reset removes only its JSON pointer.
+- Added five focused settings tests and a self-contained storage/settings guide covering plugin settings, module settings, private files, and Model3D assets.
+- Published the Windows x64 Release plugin, matching workspace, and standalone flight-peer downloads.
+
+The new settings panel requires DARTWIC Engine and Interface 2.0.0 or newer.
+Rocket simulation tasks do not call the new native SDK virtual methods. Hardware
+and non-Windows integration were not tested for this release.

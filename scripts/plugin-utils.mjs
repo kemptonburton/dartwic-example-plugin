@@ -8,6 +8,20 @@ export const pluginManifestPath = path.resolve(repoRoot, "plugin.json");
 export const deploymentSettingsPath = path.resolve(repoRoot, "deployment-settings.json");
 export const pluginOutputRoot = path.resolve(repoRoot, "plugin");
 
+export function validateStandalonePackageDependencies(packageJson) {
+  for (const field of ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"]) {
+    for (const [name, spec] of Object.entries(packageJson[field] ?? {})) {
+      if (typeof spec !== "string") continue;
+      if (!/^(?:file:|link:|\.{1,2}[\\/]|[\\/]|[A-Za-z]:[\\/])/.test(spec)) continue;
+      const target = path.resolve(repoRoot, spec.replace(/^(?:file:|link:)/, ""));
+      const relative = path.relative(repoRoot, target);
+      if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+        throw new Error(`${field} dependency '${name}' points outside this standalone repository: ${spec}`);
+      }
+    }
+  }
+}
+
 export async function readJson(filePath, fallback = null) {
   try {
     const text = await fs.readFile(filePath, "utf8");

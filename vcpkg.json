@@ -1,8 +1,9 @@
 {
-  "name": "dartwic-ethercat-plugin",
+  "name": "dartwic-example-device-plugin",
   "version-string": "2.0.0",
   "dependencies": [
     "nlohmann-json",
-    "tinyxml2"
-  ]
+    "cppzmq"
+  ],
+  "builtin-baseline": "83375d1ded4878305df9f5272f360f4f80ee0d83"
 }

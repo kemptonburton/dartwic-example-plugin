@@ -1,4 +1,5 @@
 {
-  "engineSdkSha256": "28d44a23512890f4468efbac685973529dfedb84346676b980338e09e14e641b",
-  "interfaceSdkSha256": "3fc6dfff476d8e98da870e0cd92ab633d05a6d644b8eb114d93c2df76be97012"
+  "peerDependenciesSha256": "80bbb164dccf0429f89dcc9c2a8b5a9d249aaade18765e861dc4beb6787935f7",
+  "engineSdkSha256": "f65aeb9a9f3bec7c11b0c6b0e166ecb4523ce1ddbfe390d0fea7d4a4a6c2e4ba",
+  "interfaceSdkSha256": "793d60159acb5316a36279507de628b06838aa255bd1d80d5391bbbf1bfed5c0"
 }

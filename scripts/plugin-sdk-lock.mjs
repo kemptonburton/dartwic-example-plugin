@@ -33,6 +33,7 @@ async function hashDirectory(root) {
 
 export async function buildSdkLock() {
   return {
+    peerDependenciesSha256: await hashDirectory(path.resolve(pluginRoot, "vendor")),
     engineSdkSha256: await hashDirectory(path.resolve(pluginRoot, "engine", "include", "sdk")),
     interfaceSdkSha256: await hashDirectory(path.resolve(pluginRoot, "interface", "sdk")),
   };
@@ -47,7 +48,7 @@ export async function writeSdkLock() {
 export async function verifySdkLock() {
   const expected = JSON.parse(await fs.readFile(lockPath, "utf8"));
   const actual = await buildSdkLock();
-  if (expected.engineSdkSha256 !== actual.engineSdkSha256 || expected.interfaceSdkSha256 !== actual.interfaceSdkSha256) {
+  if (expected.engineSdkSha256 !== actual.engineSdkSha256 || expected.interfaceSdkSha256 !== actual.interfaceSdkSha256 || expected.peerDependenciesSha256 !== actual.peerDependenciesSha256) {
     throw new Error("Bundled SDK files differ from sdk-lock.json. Restore the SDK snapshot from this repository tag.");
   }
   return actual;
