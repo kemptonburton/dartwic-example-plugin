@@ -10,11 +10,11 @@ The runtime is intentionally split at a C ABI boundary:
 
 ```text
 DARTWIC periodic task (ClangCL / Clang)
-  ├─ batch snapshot fixed command channels
+  ├─ read prepared fixed command handles
   ├─ encode the complete output process image
   ├─ call one synchronous C bridge exchange
   ├─ decode the complete input process image
-  └─ batch-stage fixed telemetry channels
+  └─ publish prepared fixed telemetry handles
                     │
                     ▼
 dartwic_ethercat_bridge.dll / .so (GCC or MinGW GCC)
@@ -26,6 +26,16 @@ dartwic_ethercat_bridge.dll / .so (GCC or MinGW GCC)
 No C++ objects cross the compiler boundary. The public bridge interface is `engine/include/dartwic_ethercat_bridge.h`, and `DW_EC_BRIDGE_ABI_VERSION` protects against incompatible binaries.
 
 One `ethercat.cycle` task exclusively owns one `ethercat.master` module while running. Reads and writes occur in the same EtherCAT frame cycle. There are no per-channel network operations, background command queues, or change-detection delays in the hot path.
+
+Configuration retains fixed channel and diagnostic handles, PDO mappings, and
+numeric buffers. At task start, an already connected process image is sized and
+validated before cyclic exchange. A later connection or changed topology can
+still resize the image on its first active tick. Each ordinary tick queries and
+publishes the prepared handles and makes one synchronous bridge exchange.
+Bridge/NIC latency, module mutex contention, and host scheduling remain part of
+the deadline budget; the 1 ms setting is a target, not a measured guarantee.
+Cycle failures publish the failure count and an ARGUS error with a 10-second
+firing separation; local admission is limited to one report per 2 seconds.
 
 ## Configuration
 
@@ -59,6 +69,8 @@ cmake --build --preset build-windows-clang-release --target copy_engine_plugin
 ```
 
 Set `VCPKG_ROOT` before using the presets. On Linux, use `linux-clang-release` and `build-linux-clang-release`.
+
+`npm run package` calls those native presets on Linux, builds the Interface side, and writes `plugin.zip` from a standalone checkout. Verify the KickCAT bridge's dynamic dependencies and NIC access on the target Linux host before controlling a slave chain.
 
 ## Build the KickCAT C bridge
 
@@ -107,7 +119,7 @@ Three consecutive exchange failures stop the task. Automatic reconnect is intent
 
 ## Repository layout
 
-- `engine/`: DARTWIC module, cyclic task, batch channel path, PDO codec, and bridge loader.
+- `engine/`: DARTWIC module, cyclic task, prepared fixed-channel path, PDO codec, and bridge loader.
 - `bridge/`: KickCAT-backed C ABI shared library.
 - `interface/`: dropdown-driven module and task editors.
 - `tests/`: codec, ABI loader, fake bridge, and throughput tests.

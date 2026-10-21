@@ -43,7 +43,8 @@ void EthercatModule::publishConnectionError(const std::string& message) noexcept
             message.empty() ? "Unable to exchange EtherCAT process data." : message,
             connection_error_channels_,
             "Verify that the selected adapter, EtherCAT network, and devices are available.",
-            0);
+            0,
+            10.0);
     } catch (...) {
         // Error reporting must never stop connection monitoring.
     }
