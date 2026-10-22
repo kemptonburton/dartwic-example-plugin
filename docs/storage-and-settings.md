@@ -61,13 +61,13 @@ This is the storage inventory for the engine and workspace, grouped by the kind 
 | Project rename transaction journal | Instance: `pending_project_rename.json` | Recovery for an interrupted local operation |
 | Workspace node identity | Workspace: `workspace.json` | Portable engine name; project membership is discovered from project directories |
 | Project dependencies | Project: `project.json` | Required plugins and explicitly declared files |
-| Diagnostic event enablement, limits and warning rules | Workspace: `global_data/settings.json`; optional project `settings.json` | Shared policy, with experiment-specific overrides |
+| Diagnostic event enablement, limits and warning rules | Workspace: `settings.json`; optional project `settings.json` | Shared policy, with experiment-specific overrides |
 | Recording queue/options and history retention policy | Same settings layers: `recording.options`, `recording.retention` | Portable recording policy |
 | Engine-origin notification mutes | Same settings layers: `notifications.mutes` | Shared operator choice, not an individual browser preference |
 | Interface-origin notification mutes | Interface: browser/client storage | A local presentation choice |
-| Client display profiles | Workspace: `global_data/client_info.json` | Shared display metadata; this does not grant admin access |
-| Reusable schematic definitions, plugin icons | Workspace: `global_data/schematic_nodes/`, `global_data/plugin_icons/` | Shared authored resources |
-| Reusable images, media packages and 3D models | Workspace: `global_data/assets/<namespace>/<filename>` | One asset can be referenced by several projects |
+| Client display profiles | Workspace: `client_info.json` | Shared display metadata; this does not grant admin access |
+| Reusable schematic definitions, plugin icons | Workspace: `assets/schematic_nodes/`, `assets/plugin_icons/` | Shared authored resources |
+| Reusable images, media packages and 3D models | Workspace: `assets/<namespace>/<filename>` | One asset can be referenced by several projects |
 | Project tasks, module instances, scripts and schematics | Project: `tasks/`, `modules/`, `scripts/`, `schematics/` | Authored experiment setup |
 | Channel metadata and declared startup values | Project: `rapid/channel_snapshot.json` | Portable channel configuration, not last live values |
 | Remembered peer endpoints | Project: `edge_node_connections.json` | Portable connection definitions |
@@ -94,7 +94,7 @@ This is the storage inventory for the engine and workspace, grouped by the kind 
 Portable settings use this order:
 
 ```text
-code defaults -> workspace/global_data/settings.json -> workspace/<project>/settings.json
+code defaults -> workspace/settings.json -> workspace/<project>/settings.json
 ```
 
 Only store intentional overrides. For example, the workspace can enable diagnostic warnings, while a simulation project disables them without changing the hardware project:
@@ -183,7 +183,7 @@ The sample settings are stored below your plugin ID:
 ```
 
 The code default is two decimal places. The example workspace intentionally
-sets three in `global_data/settings.json`. Changing the panel to four writes
+sets three in `settings.json`. Changing the panel to four writes
 only `decimal_places: 4` in the selected project's `settings.json`. It does
 not copy `show_units` or unrelated effective settings into that override.
 There is no plugin-specific settings file, localStorage copy, or manually built
@@ -308,7 +308,7 @@ const nodeData = {asset_path: path};
 const calibration = await assets.readJson(nodeData.asset_path);
 ```
 
-That returns `assets/my_driver/calibration-v1.json` and writes `workspace/global_data/assets/my_driver/calibration-v1.json`. Use your plugin ID as a namespace. Use a new filename when content changes, or invalidate the helper's cache after an external overwrite. Do not assume that one project's reference means the asset is unused everywhere else.
+That returns `assets/my_driver/calibration-v1.json` and writes `workspace/assets/my_driver/calibration-v1.json`. Use your plugin ID as a namespace. Use a new filename when content changes, or invalidate the helper's cache after an external overwrite. Do not assume that one project's reference means the asset is unused everywhere else.
 
 The built-in 3D node follows the same sequence:
 

@@ -155,33 +155,12 @@ async function deployInterface(sourceDir, interfaceDir, pluginId) {
   process.stdout.write(`Deployed interface plugin to ${destinationDir}.\n`);
 }
 
-async function deployRootFiles(engineDir) {
-  const sourceFilesDir = path.resolve("files");
-  if (!(await pathExists(sourceFilesDir))) {
-    return;
-  }
-
-  if (!engineDir) {
-    throw new Error("Set DARTWIC_ENGINE_DIR or configure engine_dir in deployment-settings.json to deploy files/.");
-  }
-
-  await fs.mkdir(engineDir, { recursive: true });
-  const entries = await fs.readdir(sourceFilesDir, { withFileTypes: true });
-  for (const entry of entries) {
-    await copyDirectory(
-      path.join(sourceFilesDir, entry.name),
-      path.join(engineDir, entry.name),
-    );
-  }
-  process.stdout.write(`Deployed files/ into ${engineDir}.\n`);
-}
 
 async function validateDeploymentTargets(deployMode, hasEngine, hasInterface, engineDir, interfaceDir) {
   const deploysEngine = hasEngine && deployMode !== "interface";
   const deploysInterface = hasInterface && deployMode !== "engine-debug";
-  const deploysRootFiles = await pathExists(path.resolve("files"));
 
-  if ((deploysEngine || deploysRootFiles) && !engineDir) {
+  if (deploysEngine && !engineDir) {
     throw new Error("Set DARTWIC_ENGINE_DIR or copy deployment-settings.example.json to deployment-settings.json and set engine_dir before deploying.");
   }
   if (deploysInterface && !interfaceDir) {
@@ -206,7 +185,6 @@ async function main() {
 
     await buildInterface(pluginId);
     await deployInterface(sidePaths.interfaceDir, interfaceDir, pluginId);
-    await deployRootFiles(engineDir);
     return;
   }
 
@@ -217,7 +195,6 @@ async function main() {
 
     await buildEngineDebug(pluginId);
     await deployEngineVariant(sidePaths.engineDebugDir, engineDir, pluginId, "debug engine plugin");
-    await deployRootFiles(engineDir);
     return;
   }
 
@@ -232,7 +209,6 @@ async function main() {
       await deployInterface(sidePaths.interfaceDir, interfaceDir, pluginId);
     }
 
-    await deployRootFiles(engineDir);
 
     return;
   }
@@ -247,7 +223,6 @@ async function main() {
     await deployInterface(sidePaths.interfaceDir, interfaceDir, pluginId);
   }
 
-  await deployRootFiles(engineDir);
 }
 
 await main();

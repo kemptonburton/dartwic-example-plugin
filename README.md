@@ -4,15 +4,15 @@ The [stress device](docs/stress-device.md) supplies fixed register/channel bindi
 
 This is a standalone, public plugin starter and a complete combined Engine/Interface example. It does not require access to the private DARTWIC source repository.
 
-Developers edit `plugin.json`, `engine/include`, `engine/src`, `interface/src`, and optional `files/`. The compatible Engine and Interface SDK snapshots are already bundled under `engine/include/sdk` and `interface/sdk`. They belong to this tagged example version and are not refreshed from a private checkout.
+Developers edit `plugin.json`, `engine/include`, `engine/src`, `interface/src`, and bundled `assets/`. The compatible Engine and Interface SDK snapshots are already bundled under `engine/include/sdk` and `interface/sdk`. They belong to this tagged example version and are not refreshed from a private checkout.
 
 Engine registration happens in `ExampleDevicePlugin::onPluginLoaded()` through `dartwic->registerModuleType`, `registerPeer`, `registerTaskType`, `registerOperation`, `registerDCodeFunction`, and `registerLoop`. IDs are local and become `<plugin-id>.<local-id>`. `createModule` receives the local module ID. The `example_flight_link` peer supplies a `TEMPEST::Transport` and a peer configuration callback; the engine owns RAPID and ARGUS behavior. Its registration includes UI-editable default connection values. Its raw local ZeroMQ transport requires both `receive_endpoint` and `send_endpoint`. The matching Windows flight application in `examples/flight-peer/main.cpp` uses the reversed endpoints; select native or custom transport at startup.
 
 `analyze_samples` demonstrates the shared DCode function schema: its ordinary and prepared handlers return a sum and maximum, then change the first sample through the call-scoped mutable argument. DCode aliases observe that change when the synchronous call returns.
 
-The interface uses `definePlugin({register})`. `addModuleUi` demonstrates both a React icon and a module configuration panel. The example module uses the standard module package icon; its config falls back to `workspace/global_data/plugin_icons/example-device.svg`, which is supplied through `files/`.
+The interface uses `definePlugin({register})`. `addModuleUi` demonstrates both a React icon and a module configuration panel. The example module uses the standard module package icon; its config falls back to `assets/icons/example-device.svg`, which is bundled inside the installed plugin.
 
-Place portable plugin-supplied workspace content under `files/workspace/`. This example includes a schematic-node JSON file at `files/workspace/global_data/schematic_nodes/device_examples/example_indicator.json`; installation copies that content into the selected workspace. Do not put mutable settings, credentials, runtime output, or caches in the installed plugin directory.
+Bundle plugin-owned content under `assets/`. Schematic renderers register their palette definitions through the Interface SDK; custom shared files use `workspace/assets/plugins/<plugin-id>/`. Installation never copies assets into a workspace. Do not put mutable settings, credentials, runtime output, or caches in the installed plugin directory.
 
 See [Storage and settings](docs/storage-and-settings.md) for the five location scopes, layered plugin/module settings, and shared asset examples. This release requires DARTWIC Engine and Interface 2.0.0 or newer. The example device read and write tasks use retained fixed channel handles.
 
@@ -95,8 +95,7 @@ plugin/
     plugin.json
     ui/index.js
     ...                       # UI assets
-  files/                      # optional content copied to the engine installation
-    workspace/                # portable content for the selected workspace
+  # Each installed plugin side includes its managed assets/.
 ```
 
 Omit both native directories for Interface-only plugins; omit `interface/` for native-only plugins. All included `plugin.json` files must match the root release manifest. Native packages include **both Release and Debug** in the same platform ZIP. A Release engine installs `engine/`; a Debug engine installs `engine-debug/`. There is no separate debug asset to select. Bundle each configuration's required runtime libraries beside its native library; Windows Debug packages include the plugin PDB. Linux Debug libraries retain compiler debug information.
@@ -139,6 +138,16 @@ Attach `release-manifest.json` as well when desired. Each platform build's recei
 
 The matching workspace uses a periodic DCode task for ox-tank physics and a separate state machine for fill and vent control. The device read task consumes the ox-tank level as a fixed input for the engine sensor response and exclusively publishes the module's connection channel. It refreshes its measurements and applied output readback every cycle with a one-second stale timeout; the physics task does the same for tank measurements. Discovery only advertises an available device for provisioning; it does not write device readback channels. The module page shows both linked tasks and their live bindings. When a task omits its mapping table, the module page and Example Telemetry resolve the same prefix-based defaults as the task editor and native driver (22 read bindings and nine write bindings). An explicitly empty table stays empty; custom mappings replace the defaults.
 
-The [example workspace](https://github.com/kemptonburton/dartwic-example-workspace) is the matching, independently cloneable demo and the `workspaces/dartwic-example-workspace` submodule in DARTWIC. Add its `example-workspace/` folder in the Interface; the sibling `flight-computer/`, `tools/`, and `walkthroughs/` folders are source and operating aids. It has eleven operational walkthroughs, Lua DCode, YAML templates, and the rocket model asset. Its `example_device_read` and `example_device_write` task instances use the single example device driver. The matching workspace requires Engine and Interface 2.0.0 or newer; its seven tasks require a suitable license.
+The [example workspace](https://github.com/kemptonburton/dartwic-example-workspace) is the matching, independently cloneable demo and the `tests/workspaces/dartwic-example-workspace` submodule in DARTWIC. Add its `example-workspace/` folder in the Interface; the sibling `flight-computer/`, `tools/`, and `walkthroughs/` folders are source and operating aids. It has eleven operational walkthroughs, Lua DCode, YAML templates, and the rocket model asset. Its `example_device_read` and `example_device_write` task instances use the single example device driver. The matching workspace requires Engine and Interface 2.0.0 or newer; its seven tasks require a suitable license.
 
 The three `vendor/` source snapshots are part of `sdk-lock.json`. CMake consumes those bundled dependencies, so building the plugin and flight peer does not need the private monorepo.
+
+## Asset ownership
+
+Managed files in this repository's `assets/` ship inside the installed plugin and
+are replaced with it. Keep custom shared files in
+`workspace/assets/plugins/<plugin-id>/` using the SDK helpers. Project settings
+remain project-scoped; local secrets and runtime data belong to Engine instances.
+Workspaces contain authored Git-trackable content; installed Engine and Interface
+directories contain replaceable software and local state. Plugin installation
+does not copy files into workspaces. See `assets/README.md` for the storage rules.

@@ -1,6 +1,6 @@
 {
   "name": "example_device",
   "title": "Example Device",
-  "icon": "workspace/global_data/plugin_icons/example-device.svg",
+  "icon": "assets/icons/example-device.svg",
   "description": "Example module type exposed by an engine plugin."
 }

@@ -1,9 +1,0 @@
-{
-  "name": "Example Indicator",
-  "type": "example_device_plugin.example_indicator",
-  "width": 160,
-  "height": 72,
-  "data": {
-    "label": "Example"
-  }
-}

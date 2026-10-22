@@ -57,6 +57,7 @@ await build({
 });
 
 await cp(sourceManifestPath, pluginManifestPath, {force: true});
+await cp(path.join(__dirname, "assets"), path.join(releasePluginDir, "assets"), {recursive: true, force: true});
 
 console.log(`Built example interface plugin from interface/src for ${pluginId}.`);
 console.log(`- ${releasePluginDir}`);
