@@ -1,7 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import vm from "node:vm";
-import {INTERFACE_PLUGIN_HOST_VERSION} from "../interface/sdk/internal/versions.ts";
+const versionsSource = await fs.readFile(new URL("../interface/sdk/internal/versions.ts", import.meta.url), "utf8");
+const INTERFACE_PLUGIN_HOST_VERSION = Number(versionsSource.match(/INTERFACE_PLUGIN_HOST_VERSION\s*=\s*(\d+)/)?.[1]);
+if (!Number.isSafeInteger(INTERFACE_PLUGIN_HOST_VERSION)) throw new Error("Bundled Interface SDK host version is missing.");
 
 import {verifySdkLock} from "./plugin-sdk-lock.mjs";
 import {

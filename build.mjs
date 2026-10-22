@@ -1,10 +1,17 @@
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {cp, mkdir, readFile} from "node:fs/promises";
-import {build} from "esbuild";
+import {build, transform} from "esbuild";
+import {createRequire} from "node:module";
 import postcss from "postcss";
 import tailwindcss from "tailwindcss";
-import dartwicTailwindPreset from "./interface/sdk/tailwind-preset.ts";
+// Load the SDK TypeScript preset through the bundled compiler so plain Node 22
+// works on Windows and Linux without experimental type-stripping flags.
+const presetUrl = new URL("./interface/sdk/tailwind-preset.ts", import.meta.url);
+const presetCode = await transform(await readFile(presetUrl, "utf8"), {loader: "ts", format: "cjs"});
+const presetModule = {exports: {}};
+new Function("require", "module", "exports", presetCode.code)(createRequire(presetUrl), presetModule, presetModule.exports);
+const dartwicTailwindPreset = presetModule.exports.default;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const sourceManifestPath = path.resolve(__dirname, "plugin.json");

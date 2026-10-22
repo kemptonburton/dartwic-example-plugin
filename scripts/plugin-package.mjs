@@ -1,3 +1,4 @@
+import {getPluginPlatform, packagePluginRelease} from "./plugin-release.mjs";
 import path from "node:path";
 import {verifySdkLock} from "./plugin-sdk-lock.mjs";
 
@@ -21,10 +22,6 @@ function getRequestedVersion(argv) {
   return argv.find((argument) => argument && !argument.startsWith("-")) ?? "";
 }
 
-function isDebugPackage(argv) {
-  return argv.includes("--debug");
-}
-
 async function loadPluginManifest() {
   const packageJson = await readJson(packageJsonPath);
   const pluginManifest = await readJson(pluginManifestPath);
@@ -44,19 +41,9 @@ async function loadPluginManifest() {
 async function preparePluginOutput(pluginId, hasEngine, hasInterface) {
   const sidePaths = getPluginSidePaths(pluginId);
 
-  if (hasEngine) {
-    await removePath(sidePaths.engineReleaseDir);
-    await removePath(sidePaths.engineDebugDir);
-  } else {
-    await removePath(sidePaths.engineReleaseDir);
-    await removePath(sidePaths.engineDebugDir);
-  }
-
-  if (hasInterface) {
-    await removePath(sidePaths.interfaceDir);
-  } else {
-    await removePath(sidePaths.interfaceDir);
-  }
+  await removePath(sidePaths.engineReleaseDir);
+  await removePath(sidePaths.engineDebugDir);
+  await removePath(sidePaths.interfaceDir);
 
   const sourceFiles = path.resolve(repoRoot, "files");
   const outputFiles = path.resolve(pluginOutputRoot, "files");
@@ -66,10 +53,18 @@ async function preparePluginOutput(pluginId, hasEngine, hasInterface) {
   }
 }
 
+async function configureEngine(preset) {
+  const args = ["--preset", preset];
+  if (process.env.DARTWIC_VCPKG_INSTALLED_DIR) {
+    args.push("-DVCPKG_MANIFEST_INSTALL=OFF", `-DVCPKG_INSTALLED_DIR=${path.resolve(process.env.DARTWIC_VCPKG_INSTALLED_DIR)}`);
+  }
+  await runCommand("cmake", args);
+}
+
 async function buildEngine(pluginId) {
   process.stdout.write(`Building release engine plugin for ${pluginId}.\n`);
   if (process.platform === "win32") {
-    await runCommand("cmake", ["--preset", "windows-clang-release"]);
+    await configureEngine("windows-clang-release");
     await runCommand("cmake", [
       "--build",
       "--preset",
@@ -79,27 +74,14 @@ async function buildEngine(pluginId) {
     ]);
     return;
   }
-  await runCommand("cmake", [
-    "-S",
-    ".",
-    "-B",
-    "cmake-build-release",
-    "-DCMAKE_BUILD_TYPE=Release",
-  ]);
-  await runCommand("cmake", [
-    "--build",
-    "cmake-build-release",
-    "--config",
-    "Release",
-    "--target",
-    "copy_engine_plugin",
-  ]);
+  await configureEngine("linux-clang-release");
+  await runCommand("cmake", ["--build", "--preset", "build-linux-clang-release", "--target", "copy_engine_plugin"]);
 }
 
 async function buildEngineDebug(pluginId) {
   process.stdout.write(`Building debug engine plugin for ${pluginId}.\n`);
   if (process.platform === "win32") {
-    await runCommand("cmake", ["--preset", "windows-clang-debug"]);
+    await configureEngine("windows-clang-debug");
     await runCommand("cmake", [
       "--build",
       "--preset",
@@ -109,21 +91,8 @@ async function buildEngineDebug(pluginId) {
     ]);
     return;
   }
-  await runCommand("cmake", [
-    "-S",
-    ".",
-    "-B",
-    "cmake-build-debug",
-    "-DCMAKE_BUILD_TYPE=Debug",
-  ]);
-  await runCommand("cmake", [
-    "--build",
-    "cmake-build-debug",
-    "--config",
-    "Debug",
-    "--target",
-    "copy_engine_plugin",
-  ]);
+  await configureEngine("linux-clang-debug");
+  await runCommand("cmake", ["--build", "--preset", "build-linux-clang-debug", "--target", "copy_engine_plugin"]);
 }
 
 async function buildInterface(pluginId) {
@@ -173,34 +142,10 @@ async function verifyInterfaceOutput(pluginId) {
   }
 }
 
-async function createPluginArchive(debug) {
-  const archiveName = debug ? "plugin-debug.zip" : "plugin.zip";
-  const pluginZipPath = path.resolve(repoRoot, archiveName);
-  await removePath(pluginZipPath);
-
-  if (!(await pathExists(pluginOutputRoot))) {
-    throw new Error(`Plugin output directory was not produced: ${pluginOutputRoot}`);
-  }
-
-  if (process.platform === "win32") {
-    await runCommand("powershell.exe", [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-Command",
-      `Compress-Archive -LiteralPath 'plugin' -DestinationPath '${archiveName}' -Force`,
-    ]);
-    return pluginZipPath;
-  }
-
-  await runCommand("zip", ["-qr", archiveName, "plugin"]);
-  return pluginZipPath;
-}
-
 async function main() {
   await verifySdkLock();
   const argv = process.argv.slice(2);
-  const debug = isDebugPackage(argv);
+  if (argv.includes("--help")) { console.log("npm run package [-- version]: builds Release + Debug engine and Interface, then creates plugin-<platform>.zip with both native variants, or plugin.zip for Interface-only plugins, plus checksums."); return; }
   const requestedVersion = getRequestedVersion(argv);
   if (requestedVersion) {
     process.stdout.write(`Updating plugin metadata to version ${requestedVersion}.\n`);
@@ -213,27 +158,23 @@ async function main() {
   } = await loadPluginManifest();
   const hasEngine = Boolean(pluginManifest.contains_engine_plugin);
   const hasInterface = Boolean(pluginManifest.contains_interface_plugin);
+  if (hasEngine) getPluginPlatform();
 
   const configuredVcpkgRoot = String(process.env.VCPKG_ROOT ?? "").trim();
   const localVcpkgRoot = path.resolve(repoRoot, "vcpkg");
   const vcpkgRoot = configuredVcpkgRoot || (await pathExists(localVcpkgRoot) ? localVcpkgRoot : "");
-  if (!vcpkgRoot || !(await pathExists(path.resolve(vcpkgRoot, "scripts", "buildsystems", "vcpkg.cmake")))) {
+  if (hasEngine && (!vcpkgRoot || !(await pathExists(path.resolve(vcpkgRoot, "scripts", "buildsystems", "vcpkg.cmake"))))) {
     throw new Error("Native packaging requires VCPKG_ROOT to point to your vcpkg checkout (or a vcpkg/ directory in this repository).");
   }
-  process.env.VCPKG_ROOT = path.resolve(vcpkgRoot);
+  if (hasEngine) process.env.VCPKG_ROOT = path.resolve(vcpkgRoot);
 
   await preparePluginOutput(pluginId, hasEngine, hasInterface);
 
   if (hasEngine) {
-    if (debug) {
-      await buildEngineDebug(pluginId);
-      await verifyEngineDebugOutput(pluginId);
-    } else {
-      await buildEngine(pluginId);
-      await verifyEngineOutput(pluginId);
-      await buildEngineDebug(pluginId);
-      await verifyEngineDebugOutput(pluginId);
-    }
+    await buildEngine(pluginId);
+    await verifyEngineOutput(pluginId);
+    await buildEngineDebug(pluginId);
+    await verifyEngineDebugOutput(pluginId);
   }
 
   if (hasInterface) {
@@ -244,12 +185,12 @@ async function main() {
   await runCommand(getNpmCommand(), [
     "run",
     "verify:package",
-    ...(debug ? ["--", "--debug"] : []),
+
   ]);
 
-  const archivePath = await createPluginArchive(debug);
+  await packagePluginRelease(repoRoot);
 
-  process.stdout.write(`Packaged plugin archive at ${archivePath}.\n`);
+
 }
 
 await main();

@@ -2,6 +2,9 @@ build/
 node_modules/
 vcpkg_installed/
 plugin/
-plugin.zip
+plugin-*.zip
+/release-manifest.json
 contributions.json
 deployment-settings.json
+
+/plugin.zip

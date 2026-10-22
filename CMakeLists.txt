@@ -84,6 +84,13 @@ set_target_properties(example_device_plugin_engine PROPERTIES
         PDB_OUTPUT_DIRECTORY_DEBUG "${ENGINE_PLUGIN_DIR}/bin"
         PDB_OUTPUT_DIRECTORY_RELEASE "${ENGINE_PLUGIN_DIR}/bin")
 
+if(WIN32)
+    add_custom_command(TARGET example_device_plugin_engine POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_RUNTIME_DLLS:example_device_plugin_engine> $<TARGET_FILE_DIR:example_device_plugin_engine>
+        COMMAND_EXPAND_LISTS)
+endif()
+
 set(ENGINE_PLUGIN_COPY_COMMANDS
         COMMAND ${CMAKE_COMMAND} -E make_directory "${ENGINE_PLUGIN_DIR}"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
