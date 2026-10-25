@@ -1,10 +1,11 @@
 export const EXAMPLE_READ_FIELDS = [
     "pressure_current_ma", "temperature_1", "temperature_2", "temperature_3",
     "flow", "connected", "sensor_valid", "sample_age_s",
-    "igniter_applied", "sample_counter", "fuel_position", "oxidizer_position",
-    "fill_position", "vent_position", "fuel_open_applied", "fuel_close_applied",
-    "oxidizer_open_applied", "oxidizer_close_applied", "fill_open_applied",
-    "fill_close_applied", "vent_open_applied", "vent_close_applied"
+    "igniter_command_state", "sample_counter",
+    "fuel_open_coil_state", "fuel_close_coil_state",
+    "oxidizer_open_coil_state", "oxidizer_close_coil_state",
+    "fill_open_coil_state", "fill_close_coil_state",
+    "vent_open_coil_state", "vent_close_coil_state"
 ];
 export const EXAMPLE_WRITE_FIELDS = [
     "fuel_open_coil", "fuel_close_coil", "oxidizer_open_coil", "oxidizer_close_coil",

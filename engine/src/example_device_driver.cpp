@@ -71,7 +71,7 @@ void registerExampleDeviceDriver(DARTWIC::API::SDK_API* api) {
                 const auto handle = api->createFixedChannel(channel);
                 state->bindings.emplace_back(index, handle);
                 if (writer) continue;
-                const std::array<std::string, 22> units = {"mA", "K", "K", "K", "kg/s", "", "", "s"};
+                const std::array<std::string, 18> units = {"mA", "K", "K", "K", "kg/s", "", "", "s"};
                 api->upsertChannelField(channel, ChannelField::UNITS, units[index]);
                 api->upsertChannelField(channel, ChannelField::STALE_TIMEOUT, 1.0);
                 api->setChannel(channel);

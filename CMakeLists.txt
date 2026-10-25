@@ -64,6 +64,14 @@ find_package(nlohmann_json CONFIG REQUIRED)
 find_package(cppzmq CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(example_device_state_test test/example_device_state.cpp)
+    target_include_directories(example_device_state_test PRIVATE "${ENGINE_DIR}/include" ${ENGINE_INCLUDE_DIRS})
+    target_link_libraries(example_device_state_test PRIVATE nlohmann_json::nlohmann_json)
+    add_test(NAME example_device_state COMMAND example_device_state_test)
+endif()
+
 target_link_libraries(example_device_plugin_engine PRIVATE
         nlohmann_json::nlohmann_json)
 target_link_libraries(example_device_plugin_engine PRIVATE

@@ -15,13 +15,14 @@ namespace Example {
 class ExampleDeviceModule final : public DARTWIC::Modules::BaseModule {
 public:
     using BaseModule::BaseModule;
-    static constexpr std::array<const char*, 22> readFields{
+    static constexpr std::array<const char*, 18> readFields{
         "pressure_current_ma", "temperature_1", "temperature_2", "temperature_3",
         "flow", "connected", "sensor_valid", "sample_age_s",
-        "igniter_applied", "sample_counter", "fuel_position", "oxidizer_position",
-        "fill_position", "vent_position", "fuel_open_applied", "fuel_close_applied",
-        "oxidizer_open_applied", "oxidizer_close_applied", "fill_open_applied",
-        "fill_close_applied", "vent_open_applied", "vent_close_applied"
+        "igniter_command_state", "sample_counter",
+        "fuel_open_coil_state", "fuel_close_coil_state",
+        "oxidizer_open_coil_state", "oxidizer_close_coil_state",
+        "fill_open_coil_state", "fill_close_coil_state",
+        "vent_open_coil_state", "vent_close_coil_state"
     };
     static constexpr std::array<const char*, 9> writeFields{
         "fuel_open_coil", "fuel_close_coil", "oxidizer_open_coil", "oxidizer_close_coil",
@@ -42,7 +43,7 @@ public:
         for (auto field : readFields) names.push_back(prefix + "_" + field);
         return names;
     }
-    std::array<double, 22> read(const std::array<double, 5>& inputs) {
+    std::array<double, 18> read(const std::array<double, 5>& inputs) {
         std::scoped_lock lock(mutex_);
         const auto now = std::chrono::steady_clock::now();
         const double dt = std::clamp(std::chrono::duration<double>(now - last_).count(), 0.0, 0.2);
@@ -74,8 +75,12 @@ public:
         data_[4] = pressure_/6;
         data_[5] = connected ? 1 : 0; data_[6] = valid ? 1 : 0; data_[7] = age_;
         data_[8] = igniter_; data_[9] = counter_;
-        for (size_t i=0; i<4; ++i) data_[10+i] = positions_[i];
-        for (size_t i=0; i<8; ++i) data_[14+i] = coils_[i];
+        // Command states report the resulting valve state, which persists after
+        // a pulse ends. Open and close states are complementary during travel.
+        for (size_t i=0; i<4; ++i) {
+            data_[10+i*2] = positions_[i];
+            data_[11+i*2] = 1.0 - positions_[i];
+        }
         return data_;
     }
     void write(const std::array<double, 9>& commands) {
@@ -101,7 +106,7 @@ private:
     std::chrono::steady_clock::time_point last_ = std::chrono::steady_clock::now();
     std::array<double, 8> coils_{};
     std::array<double, 4> positions_{};
-    std::array<double, 22> data_{};
+    std::array<double, 18> data_{};
     double pressure_ = 0, temperature_ = 300, igniter_ = 0, age_ = 0, counter_ = 0;
     bool connected_ = true;
 };

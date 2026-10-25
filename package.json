@@ -1,7 +1,7 @@
 {
   "name": "dartwic-example-device-plugin",
   "private": true,
-  "version": "2.0.3",
+  "version": "2.0.4",
   "type": "module",
   "scripts": {
     "test": "node --test scripts/settings.test.mjs scripts/package-metadata.test.mjs scripts/device-bindings.test.mjs scripts/plugin-release.test.mjs",

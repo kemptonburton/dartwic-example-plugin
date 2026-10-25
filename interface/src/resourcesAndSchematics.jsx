@@ -71,9 +71,9 @@ export function ExampleResource({setIsLoaded}) {
         ['Pressure sensor', 'pressure_current_ma', 'mA'],
         ['Run tank fill', 'run_fill', '%'],
         ['Fuel valve command', 'fuel_open_coil', ''],
-        ['Fuel valve applied', 'fuel_open_applied', ''],
-        ['Fuel valve position', 'fuel_position', ''],
-        ['Igniter applied', 'igniter_applied', ''],
+        ['Fuel valve open state', 'fuel_open_coil_state', ''],
+        ['Fuel valve close state', 'fuel_close_coil_state', ''],
+        ['Igniter state', 'igniter_command_state', ''],
         ['Connected', 'connected', ''],
     ];
 

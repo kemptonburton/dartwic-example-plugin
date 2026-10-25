@@ -18,6 +18,13 @@ test("default read and write task channels match the native driver's fields", as
     }
 });
 
+test("every device command has exactly one matching state field", () => {
+    const expected = EXAMPLE_WRITE_FIELDS.map(field => `${field}_state`);
+    assert.deepEqual(EXAMPLE_READ_FIELDS.filter(field => field.endsWith("_state")),
+        [expected.at(-1), ...expected.slice(0, -1)]);
+    assert.ok(EXAMPLE_READ_FIELDS.every(field => !field.endsWith("_applied") && !field.endsWith("_position")));
+});
+
 test("default mappings use the configured prefix and the driver's fallback prefix", () => {
     const task = {task_type: "example_device_plugin.example_read", arguments: {channel_prefix: "other"}};
     assert.equal(exampleTaskMappings(task)[0].channel, "other_pressure_current_ma");
