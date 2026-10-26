@@ -45,9 +45,12 @@ export function ExampleResource({setIsLoaded}) {
                 const write = tasks.find(task => task.task_type === 'example_device_plugin.example_write'
                     && task.arguments?.module_instance_name === read?.arguments?.module_instance_name);
                 const rows = [...exampleTaskMappings(read), ...exampleTaskMappings(write)];
+                const writeStates = Object.fromEntries(exampleTaskMappings(write)
+                    .map(row => [`${row.device_field}_state`, row.readback_channel]));
                 if (active) {
                     setModuleName(read?.arguments?.module_instance_name || '');
                     setBindings({...Object.fromEntries(rows.map(row => [row.device_field, row.channel])),
+                        ...writeStates,
                         run_fill: `${read?.arguments?.channel_prefix || 'example_device'}_run_fill`});
                 }
             } catch (cause) { if (active) setError(cause.message); }
@@ -71,8 +74,8 @@ export function ExampleResource({setIsLoaded}) {
         ['Pressure sensor', 'pressure_current_ma', 'mA'],
         ['Run tank fill', 'run_fill', '%'],
         ['Fuel valve command', 'fuel_open_coil', ''],
-        ['Fuel valve open state', 'fuel_open_coil_state', ''],
-        ['Fuel valve close state', 'fuel_close_coil_state', ''],
+        ['Fuel open coil state', 'fuel_open_coil_state', ''],
+        ['Fuel close coil state', 'fuel_close_coil_state', ''],
         ['Igniter state', 'igniter_command_state', ''],
         ['Connected', 'connected', ''],
     ];

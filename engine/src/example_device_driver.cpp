@@ -3,6 +3,7 @@
 #include <limits>
 #include <set>
 #include <stdexcept>
+#include <tuple>
 
 namespace Example {
 void registerExampleDeviceDiscovery(DARTWIC::API::SDK_API* api);
@@ -10,7 +11,13 @@ namespace {
 struct DriverState {
     std::shared_ptr<ExampleDeviceModule> module;
     std::vector< DARTWIC::API::FixedChannelHandle> inputs;
-    std::vector<std::pair<size_t, DARTWIC::API::FixedChannelHandle>> bindings;
+    std::vector<std::pair<size_t, DARTWIC::API::FixedChannelHandle>> readBindings;
+    struct WriteBinding {
+        size_t index;
+        DARTWIC::API::FixedChannelHandle command;
+        DARTWIC::API::FixedChannelHandle readback;
+    };
+    std::vector<WriteBinding> writeBindings;
     std::array<double, 5> simulationInputs{};
     std::array<double, 9> commands{};
 };
@@ -42,6 +49,31 @@ std::vector<std::pair<size_t, std::string>> bindingsFor(const nlohmann::json& ar
     }
     return result;
 }
+std::vector<std::tuple<size_t, std::string, std::string>> writeBindingsFor(
+    const nlohmann::json& args, const std::string& prefix) {
+    const auto commands = bindingsFor(args, "write_mappings", ExampleDeviceModule::writeFields, prefix);
+    std::vector<std::tuple<size_t, std::string, std::string>> result;
+    std::set<std::string> channels;
+    for (const auto& [index, command] : commands) channels.insert(command);
+    for (const auto& [index, command] : commands) {
+        std::string readback = command + "_state";
+        if (args.contains("write_mappings")) {
+            for (const auto& row : args.at("write_mappings")) {
+                if (row.at("device_field") != ExampleDeviceModule::writeFields[index]) continue;
+                if (row.contains("readback_channel")) {
+                    if (!row.at("readback_channel").is_string())
+                        throw std::runtime_error("Example device readback_channel must be a string");
+                    readback = row.at("readback_channel").get<std::string>();
+                }
+                break;
+            }
+        }
+        if (readback.empty() || readback.find('|') != std::string::npos || !channels.insert(readback).second)
+            throw std::runtime_error("Invalid or duplicate example device readback channel: " + readback);
+        result.emplace_back(index, command, readback);
+    }
+    return result;
+}
 std::shared_ptr<ExampleDeviceModule> moduleFor(DARTWIC::API::SDK_API* api, DARTWIC::API::TaskRuntime& runtime) {
     const auto name = runtime.getArguments().value("module_instance_name", std::string{});
     auto module = std::dynamic_pointer_cast<ExampleDeviceModule>(api->getModuleInstance(name));
@@ -62,22 +94,29 @@ void registerExampleDeviceDriver(DARTWIC::API::SDK_API* api) {
             state->module = moduleFor(api, runtime);
             const auto args = runtime.getArguments();
             const auto prefix = args.value("channel_prefix", std::string{"example_device"});
-            auto inputs = writer ? std::vector<std::string>{} : ExampleDeviceModule::inputNames(prefix, false);
-            const auto bindings = writer ? bindingsFor(args, "write_mappings", ExampleDeviceModule::writeFields, prefix)
-                : bindingsFor(args, "read_mappings", ExampleDeviceModule::readFields, prefix);
-            for (const auto& name : inputs) state->inputs.push_back(api->createFixedChannel(name));
-            if (!writer) api->upsertChannelField(prefix + "_run_fill", ChannelField::STALE_TIMEOUT, 1.0);
-            for (const auto& [index, channel] : bindings) {
-                const auto handle = api->createFixedChannel(channel);
-                state->bindings.emplace_back(index, handle);
-                if (writer) continue;
-                const std::array<std::string, 18> units = {"mA", "K", "K", "K", "kg/s", "", "", "s"};
-                api->upsertChannelField(channel, ChannelField::UNITS, units[index]);
-                api->upsertChannelField(channel, ChannelField::STALE_TIMEOUT, 1.0);
-                api->setChannel(channel);
-                api->upsertChannelField(channel, ChannelField::RECORD_MODE, RecordMode::OnValueChange);
+            std::vector<std::string> inputs;
+            if (writer) {
+                for (const auto& [index, command, readback] : writeBindingsFor(args, prefix)) {
+                    state->writeBindings.push_back({index, api->createFixedChannel(command), api->createFixedChannel(readback)});
+                    inputs.push_back(command);
+                    api->upsertChannelField(readback, ChannelField::STALE_TIMEOUT, 1.0);
+                    api->setChannel(readback);
+                    api->upsertChannelField(readback, ChannelField::RECORD_MODE, RecordMode::OnValueChange);
+                }
+            } else {
+                inputs = ExampleDeviceModule::simulationInputNames(
+                    state->module->getParameter<std::string>("channel_prefix", "example_device"));
+                for (const auto& name : inputs) state->inputs.push_back(state->module->dartwic->createFixedChannel(name));
+                const auto bindings = bindingsFor(args, "read_mappings", ExampleDeviceModule::readFields, prefix);
+                for (const auto& [index, channel] : bindings) {
+                    state->readBindings.emplace_back(index, api->createFixedChannel(channel));
+                    const std::array<std::string, 9> units = {"mA", "K", "K", "K", "kg/s", "", "", "s", ""};
+                    api->upsertChannelField(channel, ChannelField::UNITS, units[index]);
+                    api->upsertChannelField(channel, ChannelField::STALE_TIMEOUT, 1.0);
+                    api->setChannel(channel);
+                    api->upsertChannelField(channel, ChannelField::RECORD_MODE, RecordMode::OnValueChange);
+                }
             }
-            if (writer) for (const auto& [index, channel] : bindings) inputs.push_back(channel);
             runtime.setFixedInputChannels(inputs);
             runtime.setTypedRuntimeContext("dev", state);
         };
@@ -89,12 +128,15 @@ void registerExampleDeviceDriver(DARTWIC::API::SDK_API* api) {
             if (!state) throw std::runtime_error("Example device driver has no initialized task context");
             if (writer) {
                 state->commands.fill(0);
-                for (const auto& [index, handle] : state->bindings) {
-                    const double command = api->queryChannel(handle, std::numeric_limits<double>::quiet_NaN());
+                for (const auto& binding : state->writeBindings) {
+                    const double command = api->queryChannel(binding.command, std::numeric_limits<double>::quiet_NaN());
                     if (std::isnan(command)) throw std::runtime_error("Example device command binding is unavailable.");
-                    state->commands[index] = command;
+                    state->commands[binding.index] = command;
                 }
-                state->module->write(state->commands);
+                const auto states = state->module->write(state->commands);
+                for (const auto& binding : state->writeBindings)
+                    if (!api->upsertChannel(binding.readback, states[binding.index]))
+                        throw std::runtime_error("Example device command-state write was denied or its handle became stale.");
             } else {
                 for (size_t index = 0; index < state->inputs.size(); ++index) {
                     const double input = api->queryChannel(state->inputs[index], std::numeric_limits<double>::quiet_NaN());
@@ -102,13 +144,16 @@ void registerExampleDeviceDriver(DARTWIC::API::SDK_API* api) {
                     state->simulationInputs[index] = input;
                 }
                 const auto values = state->module->read(state->simulationInputs);
-                for (const auto& [index, handle] : state->bindings)
+                for (const auto& [index, handle] : state->readBindings)
                     if (!api->upsertChannel(handle, values[index]))
                         throw std::runtime_error("Example device driver fixed-channel write was denied or its handle became stale.");
             }
         };
-        task.on_end = [writer](const auto&, TaskRuntime& runtime) {
-            if (writer) if (const auto state = runtime.getTypedRuntimeContext<DriverState>("dev")) state->module->stopOutputs();
+        task.on_end = [api, writer](const auto&, TaskRuntime& runtime) {
+            if (writer) if (const auto state = runtime.getTypedRuntimeContext<DriverState>("dev")) {
+                state->module->stopOutputs();
+                for (const auto& binding : state->writeBindings) api->upsertChannel(binding.readback, 0.0);
+            }
         };
         api->registerTaskType(writer ? "example_write" : "example_read", writer ? "Example Device Write" : "Example Device Read", std::move(task));
     }

@@ -1,9 +1,8 @@
 import {definePlugin} from "../sdk/index.ts";
-import {ExampleModuleConfig} from "./moduleConfigs.jsx";
+import {moduleMap, stressModuleMap, readMap, writeMap, stressReadMap, stressWriteMap, settingsMap} from "./configMaps.mjs";
 import {ExamplePluginSettings} from "./pluginSettings.jsx";
 import {ExampleResource, ExampleSchematicNode} from "./resourcesAndSchematics.jsx";
 import {ExampleDeviceTaskConfig} from "./taskConfigs.jsx";
-import {StressTaskConfig, StressModuleConfig} from "./stressTaskConfigs.jsx";
 import React from "../sdk/react.ts";
 
 function ExampleDeviceIcon(props) {
@@ -30,16 +29,16 @@ export default definePlugin({
     id: "example_device_plugin",
     name: "Example Device Plugin",
     register(registry) {
-        for (const id of ["stress_read", "stress_write"]) registry.addTaskUi({id, name: id === "stress_read" ? "Stress Device Read" : "Stress Device Write", editor: StressTaskConfig});
-        registry.addModuleUi({id: "stress_device", name: "Stress Device", icon: ExampleDeviceIcon, panel: StressModuleConfig});
+        for (const id of ["stress_read", "stress_write"]) registry.addTaskUi({id, name: id === "stress_read" ? "Stress Device Read" : "Stress Device Write", configMap: id === "stress_read" ? stressReadMap : stressWriteMap});
+        registry.addModuleUi({id: "stress_device", name: "Stress Device", icon: ExampleDeviceIcon, configMap: stressModuleMap});
         for (const id of ["example_read", "example_write"]) registry.addTaskUi({
-            id, name: id === "example_read" ? "Example Device Read" : "Example Device Write", editor: ExampleDeviceTaskConfig,
+            id, name: id === "example_read" ? "Example Device Read" : "Example Device Write", editor: ExampleDeviceTaskConfig, configMap: id === "example_read" ? readMap : writeMap,
         });
         registry.addModuleUi({
             id: "example_device",
             name: "Example Device",
             icon: ModuleIcon,
-            panel: ExampleModuleConfig,
+            configMap: moduleMap,
             connection: ({instanceConfig}) => ({
                 channel: `${instanceConfig?.parameters?.channel_prefix || "example_device"}_connected`,
                 label: "Example Device", endpoint: "LOCAL SIMULATION", connectedValue: 1,
@@ -70,7 +69,7 @@ export default definePlugin({
         registry.addSettingsPanel({
             id: "general",
             name: "Example Settings",
-            component: ExamplePluginSettings,
+            component: ExamplePluginSettings, configMap: settingsMap,
         });
     },
 });

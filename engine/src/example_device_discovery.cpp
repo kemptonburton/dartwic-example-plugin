@@ -14,7 +14,7 @@ public:
     explicit ExampleDeviceDiscovery(DARTWIC::API::SDK_API* api)
         : api_(api), mute_("example-device-discovery", [this]{ withdraw(); }, [this]{ request_id_.clear(); }) {}
     void tick() {
-        const bool present = api_->queryChannelField("example_device_fault_disconnect", DARTWIC::API::ChannelField::VALUE, 0.0) != 1;
+        const bool present = true; // The example endpoint is always discoverable until configured.
         if (!announced_ || present != present_) {
             api_->writeLog("Example device discovery", present ? "Found simulated example device" : "Simulated example device disappeared", "stdout", present ? "info" : "warning");
             present_ = present; announced_ = true;
@@ -43,12 +43,14 @@ public:
         };
         for (auto field : ExampleDeviceModule::readFields) append(field, false);
         for (auto field : ExampleDeviceModule::writeFields) append(field, true);
-        DARTWIC::API::DiscoveryResources read_resources;
-        for (const auto& name : ExampleDeviceModule::inputNames("example_device", false))
-            read_resources.channels.push_back({name, "Simulation input", "input"});
+        DARTWIC::API::DiscoveryResources module_resources, write_resources;
+        for (const auto& name : ExampleDeviceModule::simulationInputNames("example_device"))
+            module_resources.channels.push_back({name, "Simulation input", "input"});
+        for (const auto* field : ExampleDeviceModule::writeFields)
+            write_resources.channels.push_back({std::string("example_device_") + field + "_state", "Applied output state", "output"});
         const auto editor_tasks = nlohmann::json::array({
-            {{"id", "read"}, {"label", "Read"}, {"name_suffix", "_read"}, {"task_type", "example_read"}, {"argument_key", "read_mappings"}, {"resources", read_resources.toJson()}},
-            {{"id", "write"}, {"label", "Write"}, {"name_suffix", "_write"}, {"task_type", "example_write"}, {"argument_key", "write_mappings"}}
+            {{"id", "read"}, {"label", "Read"}, {"name_suffix", "_read"}, {"task_type", "example_read"}, {"argument_key", "read_mappings"}},
+            {{"id", "write"}, {"label", "Write"}, {"name_suffix", "_write"}, {"task_type", "example_write"}, {"argument_key", "write_mappings"}, {"resources", write_resources.toJson()}}
         });
         const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         const auto request = api_->requestInterfaceUi("dartwic.module-discovery", {
@@ -58,7 +60,7 @@ public:
             {"metadata", {{"protocol", "Simulated"}, {"endpoint_label", "Simulated device 1"},
                 {"module_map_summary", "Simulated device with suggested read and write tasks."}}},
             {"channels", channels},
-            {"provisioning", {{"module_type", "example_device"}, {"suggested_instance_name", "example_device_1"}, {"resources", DARTWIC::API::DiscoveryResources{}.toJson()},
+            {"provisioning", {{"module_type", "example_device"}, {"suggested_instance_name", "example_device_1"}, {"resources", module_resources.toJson()},
                 {"channel_suggestion_editor", {{"kind", "explicit_mappings"}, {"tasks", editor_tasks}, {"entries", entries}}},
                 {"tasks", nlohmann::json::array({
                     {{"name_suffix", "_read"}, {"task_type", "example_read"}, {"arguments", {{"channel_prefix", "example_device"}, {"read_mappings", read_mappings}}}},

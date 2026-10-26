@@ -7,6 +7,7 @@
 #include <cmath>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace Example {
@@ -14,36 +15,32 @@ namespace Example {
 // task advances this state; the write task updates simulated output registers.
 class ExampleDeviceModule final : public DARTWIC::Modules::BaseModule {
 public:
-    using BaseModule::BaseModule;
-    static constexpr std::array<const char*, 18> readFields{
+    ExampleDeviceModule(nlohmann::json cfg, DARTWIC::API::SDK_API* api)
+        : BaseModule(std::move(cfg), api) {
+        if (!api) return;
+        const auto prefix = getParameter<std::string>("channel_prefix", "example_device");
+        for (const auto& name : simulationInputNames(prefix)) api->createFixedChannel(name);
+        api->upsertChannelField(prefix + "_run_fill", DARTWIC::API::ChannelField::STALE_TIMEOUT, 1.0);
+    }
+    static constexpr std::array<const char*, 9> readFields{
         "pressure_current_ma", "temperature_1", "temperature_2", "temperature_3",
         "flow", "connected", "sensor_valid", "sample_age_s",
-        "igniter_command_state", "sample_counter",
-        "fuel_open_coil_state", "fuel_close_coil_state",
-        "oxidizer_open_coil_state", "oxidizer_close_coil_state",
-        "fill_open_coil_state", "fill_close_coil_state",
-        "vent_open_coil_state", "vent_close_coil_state"
+        "sample_counter"
     };
     static constexpr std::array<const char*, 9> writeFields{
         "fuel_open_coil", "fuel_close_coil", "oxidizer_open_coil", "oxidizer_close_coil",
         "fill_open_coil", "fill_close_coil", "vent_open_coil", "vent_close_coil", "igniter_command"
     };
-    static std::vector<std::string> inputNames(const std::string& prefix, bool writer) {
-        std::vector<std::string> names;
-        if (writer) {
-            for (auto field : writeFields) names.push_back(prefix + "_" + field);
-        } else { for (auto fault : {"disconnect", "overtemperature", "sensor_bias", "missing_sensor"})
-            names.push_back(prefix + "_fault_" + fault);
-            names.push_back(prefix + "_run_fill");
-        }
-        return names;
+    static std::vector<std::string> simulationInputNames(const std::string& prefix) {
+        return {prefix + "_fault_disconnect", prefix + "_fault_overtemperature",
+            prefix + "_fault_sensor_bias", prefix + "_fault_missing_sensor", prefix + "_run_fill"};
     }
     static std::vector<std::string> outputNames(const std::string& prefix) {
         std::vector<std::string> names;
         for (auto field : readFields) names.push_back(prefix + "_" + field);
         return names;
     }
-    std::array<double, 18> read(const std::array<double, 5>& inputs) {
+    std::array<double, 9> read(const std::array<double, 5>& inputs) {
         std::scoped_lock lock(mutex_);
         const auto now = std::chrono::steady_clock::now();
         const double dt = std::clamp(std::chrono::duration<double>(now - last_).count(), 0.0, 0.2);
@@ -74,39 +71,41 @@ public:
         } else age_ += dt; // Retain the last readings and publish explicit invalidity.
         data_[4] = pressure_/6;
         data_[5] = connected ? 1 : 0; data_[6] = valid ? 1 : 0; data_[7] = age_;
-        data_[8] = igniter_; data_[9] = counter_;
-        // Command states report the resulting valve state, which persists after
-        // a pulse ends. Open and close states are complementary during travel.
-        for (size_t i=0; i<4; ++i) {
-            data_[10+i*2] = positions_[i];
-            data_[11+i*2] = 1.0 - positions_[i];
-        }
+        data_[8] = counter_;
         return data_;
     }
-    void write(const std::array<double, 9>& commands) {
+    std::array<double, 9> write(const std::array<double, 9>& commands) {
         std::scoped_lock lock(mutex_);
-        if (!connected_) return;
-        for (size_t i=0; i<4; ++i) {
-            const bool open = commands[i*2] == 1, close = commands[i*2+1] == 1;
-            if (open && close) {
-                coils_[i*2] = coils_[i*2+1] = 0;
-            } else {
-                const double a = open ? 1 : 0, b = close ? 1 : 0;
-                coils_[i*2] = a; coils_[i*2+1] = b;
+        if (connected_) {
+            for (size_t i=0; i<4; ++i) {
+                const bool open = commands[i*2] == 1, close = commands[i*2+1] == 1;
+                if (open && close) {
+                    coils_[i*2] = coils_[i*2+1] = 0;
+                } else {
+                    coils_[i*2] = open ? 1 : 0;
+                    coils_[i*2+1] = close ? 1 : 0;
+                }
             }
+            igniter_ = commands[8] == 1 ? 1 : 0;
         }
-        igniter_ = commands[8] == 1 ? 1 : 0;
+        return outputStatesLocked();
     }
     void stopOutputs() {
         std::scoped_lock lock(mutex_);
         coils_.fill(0); igniter_ = 0;
     }
 private:
+    std::array<double, 9> outputStatesLocked() const {
+        std::array<double, 9> result{};
+        std::copy(coils_.begin(), coils_.end(), result.begin());
+        result[8] = igniter_;
+        return result;
+    }
     ExampleDeviceMutex mutex_;
     std::chrono::steady_clock::time_point last_ = std::chrono::steady_clock::now();
     std::array<double, 8> coils_{};
     std::array<double, 4> positions_{};
-    std::array<double, 18> data_{};
+    std::array<double, 9> data_{};
     double pressure_ = 0, temperature_ = 300, igniter_ = 0, age_ = 0, counter_ = 0;
     bool connected_ = true;
 };

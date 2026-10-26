@@ -76,6 +76,7 @@ void registerStressDevice(DARTWIC::API::SDK_API* api) {
                 state->channels[i] = state->api->createFixedChannel(name);
                 state->api->upsertChannelField(name, ChannelField::RECORD_MODE, record_mode == "every_value" ? RecordMode::EveryValue : RecordMode::OnValueChange);
                 if (writer) inputs.push_back(name);
+                else state->api->setChannel(name);
             }
             runtime.setFixedInputChannels(inputs);
             runtime.setTypedRuntimeContext("stress", state);

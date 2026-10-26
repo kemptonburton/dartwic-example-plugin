@@ -6,22 +6,29 @@ import {EXAMPLE_READ_FIELDS, EXAMPLE_WRITE_FIELDS, exampleTaskMappings,
 
 test("default read and write task channels match the native driver's fields", async () => {
     const header = await readFile(new URL("../engine/include/example_device_module.h", import.meta.url), "utf8");
-    for (const [kind, fields, direction] of [["read", EXAMPLE_READ_FIELDS, "output"], ["write", EXAMPLE_WRITE_FIELDS, "input"]]) {
+    for (const [kind, fields] of [["read", EXAMPLE_READ_FIELDS], ["write", EXAMPLE_WRITE_FIELDS]]) {
         const declaration = header.match(new RegExp(`${kind}Fields\\{([\\s\\S]*?)\\};`))[1];
         const driverFields = [...declaration.matchAll(/"([^"]+)"/g)].map(match => match[1]);
         assert.deepEqual(fields, driverFields);
         const task = {task_type: `example_device_plugin.example_${kind}`,
             arguments: {module_instance_name: "test", channel_prefix: "example_device"}};
-        assert.deepEqual(resolveExampleTaskChannels(task), driverFields.map(field => ({
-            name: `example_device_${field}`, label: field, direction
-        })));
+        const expected = kind === "read"
+            ? driverFields.map(field => ({name: `example_device_${field}`, label: field,
+                direction: "output", detail: field}))
+            : driverFields.flatMap(field => [
+                {name: `example_device_${field}`, label: field, direction: "input", detail: field},
+                {name: `example_device_${field}_state`, label: `${field}_state`, direction: "output",
+                    detail: `${field} state`},
+            ]);
+        assert.deepEqual(resolveExampleTaskChannels(task), expected);
     }
 });
 
-test("every device command has exactly one matching state field", () => {
-    const expected = EXAMPLE_WRITE_FIELDS.map(field => `${field}_state`);
-    assert.deepEqual(EXAMPLE_READ_FIELDS.filter(field => field.endsWith("_state")),
-        [expected.at(-1), ...expected.slice(0, -1)]);
+test("state readbacks belong to write mappings and sensor reads have no command states", () => {
+    assert.equal(EXAMPLE_READ_FIELDS.filter(field => field.endsWith("_state")).length, 0);
+    const task = {task_type: "example_device_plugin.example_write", arguments: {channel_prefix: "example_device"}};
+    assert.deepEqual(exampleTaskMappings(task).map(row => row.readback_channel),
+        EXAMPLE_WRITE_FIELDS.map(field => `example_device_${field}_state`));
     assert.ok(EXAMPLE_READ_FIELDS.every(field => !field.endsWith("_applied") && !field.endsWith("_position")));
 });
 
@@ -35,7 +42,14 @@ test("explicit mappings replace defaults, including an explicitly empty table", 
     const task = {task_type: "example_device_plugin.example_write", arguments: {
         write_mappings: [{device_field: "igniter_command", channel: "custom_igniter"}]
     }};
-    assert.deepEqual(resolveExampleTaskChannels(task), [{name: "custom_igniter", label: "igniter_command", direction: "input"}]);
+    assert.deepEqual(resolveExampleTaskChannels(task), [
+        {name: "custom_igniter", label: "igniter_command", direction: "input", detail: "igniter_command"},
+        {name: "custom_igniter_state", label: "igniter_command_state", direction: "output",
+            detail: "igniter_command state"},
+    ]);
+    assert.equal(exampleTaskMappings({...task, arguments: {write_mappings: [
+        {device_field: "igniter_command", channel: "custom_igniter", readback_channel: "custom_feedback"},
+    ]}})[0].readback_channel, "custom_feedback");
     assert.deepEqual(exampleTaskMappings({...task, arguments: {write_mappings: []}}), []);
     assert.deepEqual(exampleTaskMappings(undefined), []);
 });
