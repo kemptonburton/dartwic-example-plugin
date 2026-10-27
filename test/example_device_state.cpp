@@ -6,7 +6,7 @@ int main() {
     Example::ExampleDeviceModule device(nlohmann::json::object(), nullptr);
     std::array<double, 5> inputs{};
     auto sensors = device.read(inputs);
-    assert(sensors[5] == 1.0 && sensors[6] == 1.0);
+    assert(sensors[5] == 1.0);
 
     std::array<double, 9> commands{};
     auto states = device.write(commands);
@@ -48,7 +48,7 @@ int main() {
     device.write(commands);
     inputs[0] = 1.0;
     sensors = device.read(inputs);
-    assert(sensors[5] == 0.0 && sensors[6] == 0.0);
+    assert(sensors[5] == 0.0);
     states = device.write(commands);
     for (double state : states) assert(state == 0.0);
 }

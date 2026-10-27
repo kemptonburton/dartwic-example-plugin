@@ -10,7 +10,7 @@ Create one `example_device_plugin.stress_read` task and one `example_device_plug
 {"register": 0, "channel": "stress_0000_in_1"}
 ```
 
-Map registers zero through four exactly once to distinct, nonempty channel names. Configuration validates the table, creates module-owned fixed RAPID channels, and retains their handles. The write task declares its fixed inputs. Repeated task bodies use those handles, and the standard interface task editor exposes the mappings through the shared binding table. The module overview uses the configured channel names rather than reconstructing implicit bindings.
+Map registers zero through four exactly once to distinct, nonempty channel names. Configuration validates the table, creates module-owned fixed RAPID channels, and retains their handles. The write task declares its fixed inputs. Repeated task bodies use those handles, and the standard interface task editor exposes the mappings through its registered Config Map, including module selection and recording mode. The module overview uses the configured channel names rather than reconstructing implicit bindings.
 
 Read publication is synchronous, including attached calculations and event reactions. The write task reads the current commands and stores them in simulated output registers during its callback. Neither successful callback completion nor these simulated registers establish physical I/O performance.
 

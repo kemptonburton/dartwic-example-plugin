@@ -1,9 +1,11 @@
 #include "example_device_module.h"
+#include "stress_device_module.h"
 #include <cmath>
 #include <limits>
 #include <set>
 #include <stdexcept>
 #include <tuple>
+#include <unordered_map>
 
 namespace Example {
 void registerExampleDeviceDiscovery(DARTWIC::API::SDK_API* api);
@@ -39,6 +41,9 @@ std::vector<std::pair<size_t, std::string>> bindingsFor(const nlohmann::json& ar
             throw std::runtime_error(std::string(argument) + " needs device_field and channel strings");
         const auto field = row.at("device_field").get<std::string>();
         const auto channel = row.at("channel").get<std::string>();
+        // Older task files may still contain this module-owned status row.
+        // Keep them loadable, but never let a read task claim or publish it.
+        if (std::string(argument) == "read_mappings" && field == "connected") continue;
         const auto found = std::find_if(fields.begin(), fields.end(), [&](const char* name) { return field == name; });
         if (found == fields.end() || channel.empty() || channel.find('|') != std::string::npos)
             throw std::runtime_error("Invalid example device binding: " + field);
@@ -85,6 +90,36 @@ void registerExampleDeviceDriver(DARTWIC::API::SDK_API* api) {
     using namespace DARTWIC::API;
     api->registerModuleType({.id="example_device", .name="Example Device"});
     registerExampleDeviceDiscovery(api);
+    struct ConnectionPublisher {
+        std::weak_ptr<DARTWIC::Modules::BaseModule> module;
+        FixedChannelHandle channel;
+    };
+    auto publishers = std::make_shared<std::unordered_map<std::string, ConnectionPublisher>>();
+    api->registerLoop("connection_monitor", "Example Device Connections", {
+        .on_start = [publishers] { publishers->clear(); },
+        .on_loop = [api, publishers] {
+            // This background monitor is independent of device read/write tasks.
+            // Prune deleted/replaced modules before adopting their replacements.
+            for (auto it = publishers->begin(); it != publishers->end();) {
+                if (it->second.module.expired() ||
+                    api->getModuleInstance(it->first) != it->second.module.lock()) {
+                    api->freeChannel(it->second.channel);
+                    it = publishers->erase(it);
+                } else ++it;
+            }
+            for (const auto& summary : api->getModuleInstances("example_device_plugin")) {
+                const auto module = api->getModuleInstance(summary.name);
+                const auto device = std::dynamic_pointer_cast<ExampleDeviceModule>(module);
+                const auto stress = std::dynamic_pointer_cast<StressDeviceModule>(module);
+                if (!device && !stress) continue;
+                auto [it, inserted] = publishers->try_emplace(summary.name,
+                    ConnectionPublisher{module, device ? device->connectionChannel() : stress->connectionChannel()});
+                const double connected = device ? device->monitorConnection() : 1.0;
+                api->setChannel(it->second.channel, connected);
+            }
+        },
+        .target_frequency_hz = 1.0,
+    });
     for (bool writer : {false, true}) {
         TaskTypeDefinition task;
         task.metadata.structure = TaskStructure::Periodic;
@@ -109,7 +144,7 @@ void registerExampleDeviceDriver(DARTWIC::API::SDK_API* api) {
                 const auto bindings = bindingsFor(args, "read_mappings", ExampleDeviceModule::readFields, prefix);
                 for (const auto& [index, channel] : bindings) {
                     state->readBindings.emplace_back(index, api->createFixedChannel(channel));
-                    const std::array<std::string, 9> units = {"mA", "K", "K", "K", "kg/s", "", "", "s", ""};
+                    const std::array<std::string, 8> units = {"mA", "K", "K", "K", "kg/s", "", "s", ""};
                     api->upsertChannelField(channel, ChannelField::UNITS, units[index]);
                     api->upsertChannelField(channel, ChannelField::STALE_TIMEOUT, 1.0);
                     api->upsertChannelField(channel, ChannelField::RECORD_MODE, RecordMode::OnValueChange);

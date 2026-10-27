@@ -30,7 +30,10 @@ export default definePlugin({
     name: "Example Device Plugin",
     register(registry) {
         for (const id of ["stress_read", "stress_write"]) registry.addTaskUi({id, name: id === "stress_read" ? "Stress Device Read" : "Stress Device Write", configMap: id === "stress_read" ? stressReadMap : stressWriteMap});
-        registry.addModuleUi({id: "stress_device", name: "Stress Device", icon: ExampleDeviceIcon, configMap: stressModuleMap});
+        registry.addModuleUi({id: "stress_device", name: "Stress Device", icon: ExampleDeviceIcon, configMap: stressModuleMap,
+            connection: ({instanceConfig}) => ({channel: `${instanceConfig.name}.info.connected`,
+                label: "Stress Device", endpoint: "LOCAL SIMULATION", connectedValue: 1}),
+        });
         for (const id of ["example_read", "example_write"]) registry.addTaskUi({
             id, name: id === "example_read" ? "Example Device Read" : "Example Device Write", editor: ExampleDeviceTaskConfig, configMap: id === "example_read" ? readMap : writeMap,
         });

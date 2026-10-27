@@ -25,17 +25,24 @@ export function taskMap(read, stress = false) {
                 task.arguments[key] = exampleTaskMappings(task);
                 task._configMapDefaultedBindings = key;
             }
+            if (read && !stress && task.arguments[key]?.some(row => row.device_field === 'connected')) {
+                task._configMapOriginalBindings = task.arguments[key];
+                task.arguments[key] = task.arguments[key].filter(row => row.device_field !== 'connected');
+            }
             return task;
         },
         async apply(next, previous, context) {
             const baseline = {...previous, arguments: {...previous.arguments}};
             if (previous._configMapDefaultedBindings === key) delete baseline.arguments[key];
+            if (previous._configMapOriginalBindings) baseline.arguments[key] = previous._configMapOriginalBindings;
             return adapter.apply(next, baseline, context);
         },
         groups: [{id: 'configuration', label: 'Task configuration', fields: [
             {path: 'arguments.module_instance_name', label: 'Module connection', type: 'module', required: true,
                 pluginId, moduleTypeIds: [stress ? 'stress_device' : 'example_device']},
-            ...(!stress ? [{path: 'arguments.channel_prefix', label: 'Simulation control prefix', type: 'text', required: true, defaultValue: 'example_device'}] : []),
+            ...(stress ? [{path: 'arguments.record_mode', label: 'Recording', type: 'select', defaultValue: 'on_value_change',
+                options: [{value: 'on_value_change', label: 'On value change'}, {value: 'every_value', label: 'Every sample'}]}] : []),
+            ...(!stress ? [{path: 'arguments.channel_prefix', label: 'Default channel prefix', type: 'text', required: true, defaultValue: 'example_device'}] : []),
         ]}, {id: 'bindings', label: 'Channel bindings', tables: [{path: `arguments.${key}`, label: read ? 'Read bindings' : 'Write bindings', columns: [
             stress ? {path: 'register', label: 'Device register (0–4)', type: 'number', required: true, min: 0, max: 4, integer: true}
                 : {path: 'device_field', label: 'Device field', type: 'select', required: true, options: fields.map(value => ({value, label: value}))},

@@ -20,11 +20,14 @@ public:
         if (!api) return;
         const auto prefix = getParameter<std::string>("channel_prefix", "example_device");
         for (const auto& name : simulationInputNames(prefix)) api->createFixedChannel(name);
+        connection_ = api->createFixedChannel(prefix + "_connected");
+        disconnect_ = api->createFixedChannel(prefix + "_fault_disconnect");
+        api->upsertChannelField(prefix + "_connected", DARTWIC::API::ChannelField::STALE_TIMEOUT, 3.0);
         api->upsertChannelField(prefix + "_run_fill", DARTWIC::API::ChannelField::STALE_TIMEOUT, 1.0);
     }
-    static constexpr std::array<const char*, 9> readFields{
+    static constexpr std::array<const char*, 8> readFields{
         "pressure_current_ma", "temperature_1", "temperature_2", "temperature_3",
-        "flow", "connected", "sensor_valid", "sample_age_s",
+        "flow", "sensor_valid", "sample_age_s",
         "sample_counter"
     };
     static constexpr std::array<const char*, 9> writeFields{
@@ -40,7 +43,15 @@ public:
         for (auto field : readFields) names.push_back(prefix + "_" + field);
         return names;
     }
-    std::array<double, 9> read(const std::array<double, 5>& inputs) {
+    const DARTWIC::API::FixedChannelHandle& connectionChannel() const { return connection_; }
+    double monitorConnection() {
+        const bool connected = !dartwic || dartwic->queryChannel(disconnect_) != 1;
+        std::scoped_lock lock(mutex_);
+        connected_ = connected;
+        if (!connected) { coils_.fill(0); igniter_ = 0; }
+        return connected ? 1.0 : 0.0;
+    }
+    std::array<double, 8> read(const std::array<double, 5>& inputs) {
         std::scoped_lock lock(mutex_);
         const auto now = std::chrono::steady_clock::now();
         const double dt = std::clamp(std::chrono::duration<double>(now - last_).count(), 0.0, 0.2);
@@ -70,8 +81,8 @@ public:
             ++counter_;
         } else age_ += dt; // Retain the last readings and publish explicit invalidity.
         data_[4] = pressure_/6;
-        data_[5] = connected ? 1 : 0; data_[6] = valid ? 1 : 0; data_[7] = age_;
-        data_[8] = counter_;
+        data_[5] = valid ? 1 : 0; data_[6] = age_;
+        data_[7] = counter_;
         return data_;
     }
     std::array<double, 9> write(const std::array<double, 9>& commands) {
@@ -101,11 +112,12 @@ private:
         result[8] = igniter_;
         return result;
     }
+    DARTWIC::API::FixedChannelHandle connection_, disconnect_;
     ExampleDeviceMutex mutex_;
     std::chrono::steady_clock::time_point last_ = std::chrono::steady_clock::now();
     std::array<double, 8> coils_{};
     std::array<double, 4> positions_{};
-    std::array<double, 9> data_{};
+    std::array<double, 8> data_{};
     double pressure_ = 0, temperature_ = 300, igniter_ = 0, age_ = 0, counter_ = 0;
     bool connected_ = true;
 };

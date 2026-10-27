@@ -46,6 +46,7 @@ public:
         DARTWIC::API::DiscoveryResources module_resources, write_resources;
         for (const auto& name : ExampleDeviceModule::simulationInputNames("example_device"))
             module_resources.channels.push_back({name, "Simulation input", "input"});
+        module_resources.channels.push_back({"example_device_connected", "Connection status", "output"});
         for (const auto* field : ExampleDeviceModule::writeFields)
             write_resources.channels.push_back({std::string("example_device_") + field + "_state", "Applied output state", "output"});
         const auto editor_tasks = nlohmann::json::array({

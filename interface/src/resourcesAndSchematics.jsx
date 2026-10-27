@@ -44,23 +44,39 @@ export function ExampleResource({setIsLoaded}) {
                 const read = tasks.find(task => task.task_type === 'example_device_plugin.example_read');
                 const write = tasks.find(task => task.task_type === 'example_device_plugin.example_write'
                     && task.arguments?.module_instance_name === read?.arguments?.module_instance_name);
+                const inventory = await operation('dartwic/get-module-instances', {}, 15000);
+                if (inventory?.error) throw new Error(inventory.payload?.error || 'Could not list example modules.');
+                const module = inventory?.payload?.module_instances?.find(item => item.name === read?.arguments?.module_instance_name)
+                    || inventory?.payload?.module_instances?.find(item => item.module_type_id === 'example_device');
+                let moduleConfig = module;
+                if (module?.resource_path) {
+                    const resourcePath = module.resource_path.replace(/\\/g, '/');
+                    const file = await operation('dartwic/get-file', {rootDir: 'projects_directory',
+                        filePath: resourcePath.startsWith('modules/') ? resourcePath : `modules/${resourcePath}`}, 15000);
+                    if (file?.error) throw new Error(file.payload?.error || 'Could not read example module settings.');
+                    moduleConfig = JSON.parse(file.payload.content);
+                }
+                const prefix = moduleConfig?.parameters?.channel_prefix || 'example_device';
                 const rows = [...exampleTaskMappings(read), ...exampleTaskMappings(write)];
                 const writeStates = Object.fromEntries(exampleTaskMappings(write)
                     .map(row => [`${row.device_field}_state`, row.readback_channel]));
                 if (active) {
-                    setModuleName(read?.arguments?.module_instance_name || '');
+                    setModuleName(module?.name || read?.arguments?.module_instance_name || '');
                     setBindings({...Object.fromEntries(rows.map(row => [row.device_field, row.channel])),
                         ...writeStates,
+                        connected: `${prefix}_connected`,
                         run_fill: `${read?.arguments?.channel_prefix || 'example_device'}_run_fill`});
                 }
             } catch (cause) { if (active) setError(cause.message); }
         };
         void refresh();
         window.addEventListener('dartwic:tasks-changed', refresh);
+        window.addEventListener('dartwic:modules-changed', refresh);
         window.addEventListener('focus', refresh);
         return () => {
             active = false;
             window.removeEventListener('dartwic:tasks-changed', refresh);
+            window.removeEventListener('dartwic:modules-changed', refresh);
             window.removeEventListener('focus', refresh);
         };
     }, [operation]);

@@ -10,29 +10,17 @@ Engine registration happens in `ExampleDevicePlugin::onPluginLoaded()` through `
 
 `analyze_samples` demonstrates the shared DCode function schema: its ordinary and prepared handlers return a sum and maximum, then change the first sample through the call-scoped mutable argument. DCode aliases observe that change when the synchronous call returns.
 
-The interface uses `definePlugin({register})`. `addModuleUi` demonstrates both a React icon and a module configuration panel. The example module uses the standard module package icon; its config falls back to `assets/icons/example-device.svg`, which is bundled inside the installed plugin.
+The interface uses `definePlugin({register})`. `addModuleUi` demonstrates a React icon and a shared Config Map. Both module types, all four task editors, and plugin settings use Config Maps; custom task/settings layouts compose sections with `groupIds` over the same registered document. The example module uses the standard module package icon; its config falls back to `assets/icons/example-device.svg`, which is bundled inside the installed plugin.
 
 Each example device command has one readback named `<command>_state` under the same channel prefix. For example, `example_device_oxidizer_close_coil` reports through `example_device_oxidizer_close_coil_state`. Coil states report applied output registers and return to zero when their command pulse ends. The device publishes no valve-position feedback. The matching workspace's DCode loop derives a last-commanded-open estimate after observing an energized coil state. `igniter_command_state` reports the applied igniter output. A disconnected device reports `connected=0`, `sensor_valid=0`, and all output states at zero; a retained DCode valve estimate is not physical confirmation.
 
 Bundle plugin-owned content under `assets/`. Schematic renderers register their palette definitions through the Interface SDK; custom shared files use `workspace/assets/plugins/<plugin-id>/`. Installation never copies assets into a workspace. Do not put mutable settings, credentials, runtime output, or caches in the installed plugin directory.
 
-See [Storage and settings](docs/storage-and-settings.md) for the five location scopes, layered plugin/module settings, and shared asset examples. This release requires DARTWIC Engine and Interface 2.0.0 or newer. The example device read and write tasks use retained fixed channel handles.
+See [Storage and settings](docs/storage-and-settings.md) for the five location scopes, layered plugin/module settings, and shared asset examples. This release requires DARTWIC Engine 2.0.7 and Interface 2.0.12 or newer. The example device read and write tasks use retained fixed channel handles.
 
-The settings panel demonstrates **Decimal places**, **Show units**, and
-**Resource title**. It saves changed fields automatically after 500 ms
-through `createStorageClient`, with no Save button or location selector.
-`interface/src/settings.mjs` handles defaults, validation, and project-scoped
-storage; `settingsAutosave.mjs` coalesces field patches and serializes writes;
-`useDisplaySettings.jsx` connects that queue to React and notifications. The
-Example Telemetry resource updates its title and formats live values from the
-example device read/write binding tables. These settings change presentation,
-not device acquisition or control.
+The settings Config Map exposes **Decimal places**, **Show units**, and **Resource title**. The host saves plugin settings on blur and serializes writes. Module and task editors share the host's Apply flow. `configMaps.mjs` owns declarations and adapters; `settings.mjs` supplies defaults, validation and project-scoped storage. The settings adapter sends changed fields with the captured project and opaque revision; errors remain visible for explicit recovery. Example Telemetry follows those accepted settings.
 
-Pending edits flush when the panel closes. Each session captures its project
-and uses the latest opaque revision, so a delayed write cannot target a new
-project or silently overwrite a teammate's changes. Failed writes stay visibly
-unsaved; Reload settings discards the draft and rereads the host. `npm test`
-covers debounce, concurrent edits, project capture, validation, and recovery.
+The module creates `<prefix>_connected` and a shared connection-monitor loop publishes it once per second, independently of read/write task state. The local stress module similarly publishes `<instance>.info.connected`. It follows `<prefix>_fault_disconnect`; stopping either I/O task does not disconnect the module. Discovery lists connection status with module channels, and read mappings contain measurements only. Legacy `connected` read rows are ignored by the driver and removed from the editable map on the next Apply.
 
 ## Setup
 
