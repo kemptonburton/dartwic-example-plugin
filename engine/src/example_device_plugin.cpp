@@ -13,7 +13,7 @@ namespace Example {
         registerExampleDeviceDriver(dartwic);
         registerStressDevice(dartwic);
 
-        dartwic->registerPeer({
+        dartwic->registerPeerTransport({
             .id = "example_flight_link",
             .name = "Example Flight Link",
             .default_config = {

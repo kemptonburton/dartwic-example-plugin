@@ -18,7 +18,7 @@ public:
     explicit ExampleTransport(nlohmann::json config);
     ~ExampleTransport() override;
 
-    void start(TEMPEST::TransportCallbacks callbacks) override;
+    void start() override;
     void send(TEMPEST::Message message) override;
     void stop() override;
     std::vector<TEMPEST::TransportPath> diagnostics() const override;

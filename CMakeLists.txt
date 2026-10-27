@@ -48,7 +48,9 @@ if(NOT TARGET TEMPEST::Peer)
     add_subdirectory(vendor/peer)
 endif()
 if(NOT TARGET DARTWIC::EngineProtocol)
+if(NOT TARGET DARTWIC::EngineProtocol)
     add_subdirectory(vendor/engine-protocol)
+endif()
 endif()
 
 file(GLOB ENGINE_INCLUDE_DIRS
@@ -130,4 +132,4 @@ message(STATUS "Using the bundled Engine SDK snapshot from engine/include/sdk.")
 
 add_executable(rocket-flight-peer examples/flight-peer/main.cpp engine/src/example_transport.cpp)
 target_include_directories(rocket-flight-peer PRIVATE engine/include)
-target_link_libraries(rocket-flight-peer PRIVATE TEMPEST::Peer DARTWIC::EngineProtocol cppzmq nlohmann_json::nlohmann_json)
+target_link_libraries(rocket-flight-peer PRIVATE DARTWIC::PeerClient cppzmq nlohmann_json::nlohmann_json)

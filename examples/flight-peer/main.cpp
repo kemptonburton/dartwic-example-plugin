@@ -1,6 +1,6 @@
 #include <tempest/ZmqPeer.h>
 #include <tempest/JsonValue.h>
-#include <dartwic/EngineProtocol.h>
+#include <dartwic/PeerClient.h>
 #include "example_transport.h"
 #include <algorithm>
 #include <atomic>
@@ -56,15 +56,14 @@ int main(int argc, char** argv) {
         if (transport == "native") link = TEMPEST::makeZmqTransport({.host=host, .port=port, .password=password});
         else link = std::make_shared<Example::ExampleTransport>(nlohmann::json{
             {"receive_endpoint", receive_endpoint}, {"send_endpoint", send_endpoint}});
-        TEMPEST::Peer peer({.node_name="FLIGHT_COMPUTER",
-            .peer_id=transport == "native" ? "tempest.engine" : "example_device_plugin.example_flight_link",
-            .protocol_id="tempest.engine", .protocol_version=DARTWIC::EngineContract::version}, link);
+        DARTWIC::PeerClient peer({.node_name="FLIGHT_COMPUTER",.host=host,.port=port,.password=password,
+            .peer_id="tempest.engine"},link);
         std::atomic<bool> transport_failed{false};
         if (transport == "custom") peer.onStateChanged([&](TEMPEST::ConnectionState state, std::string reason) {
             if (state == TEMPEST::ConnectionState::Disconnected && reason.starts_with("Custom link failed"))
                 transport_failed = true;
         });
-        DARTWIC::EngineProtocol protocol(peer);
+        auto& protocol=peer;
         std::mutex mutex;
         std::atomic<double> rate{5}, altitude{0}, velocity{0};
         std::atomic<int> flight_phase{0}; // 0 pad, 1 ascent, 2 descent, 3 landed
@@ -77,16 +76,14 @@ int main(int argc, char** argv) {
                 .stream="Flight computer", .text=text, .timestamp_ns=timestamp()};
             { std::lock_guard lock(mutex); entry.sequence=++sequence; history.push_back(entry); if(history.size()>250) history.pop_front(); }
             std::cout << text << std::endl;
-            protocol.logs().publish(std::move(entry));
+            protocol.logs().publishLogTelemetry(std::move(entry));
         };
         const auto snapshots = [&] {
-            std::vector<DARTWIC::ChannelSnapshot> result;
+            DARTWIC::ChannelUpdates result;
             const auto add = [&](std::string key, TEMPEST::Value value, std::string units, bool writable=false) {
-                result.push_back({"FLIGHT_COMPUTER", key,
-                    {{"value", value}, {"units", units}, {"timestamp", timestamp()},
-                     {"control_policy", writable ? "free" : "observe_only"}, {"control_owner", writable ? "" : "peer:flight"},
-                     {"record_mode", "on_value_change"}, {"stale_timeout", 2.0}, {"storage", "dynamic"}},
-                    counter.load(), peer.sessionId()});
+                result.push_back({key,{.value=value,.timestamp=timestamp(),.units=units,.stale_timeout=2.0,.record_mode="on_value_change",
+                    .extra={{"control_policy",writable?"free":"observe_only"},{"control_owner",writable?"":"peer:flight"},{"storage","dynamic"}}},
+                    "FLIGHT_COMPUTER",counter.load(),peer.sessionId()});
             };
             add("battery_voltage", 24.0 + std::sin(counter.load()*0.01)*0.2, "V");
             add("sample_counter", counter.load(), "samples");
@@ -99,35 +96,31 @@ int main(int argc, char** argv) {
             return result;
         };
         DARTWIC::ChannelHandlers channels;
-        channels.query = [&](const auto& request) {
+        channels.queryCommand = [&](const auto& request) {
             auto records = snapshots();
             if (!request.channels.empty()) std::erase_if(records, [&](const auto& record) {
                 return std::find(request.channels.begin(), request.channels.end(), record.channel) == request.channels.end();
             });
             return DARTWIC::ChannelQueryResult{std::move(records)};
         };
-        channels.upsert = [&](const DARTWIC::ChannelUpsert& request) {
-            if (request.owner_node != "FLIGHT_COMPUTER" || request.channel != "telemetry_rate_hz" || request.field != "value")
-                throw TEMPEST::RemoteError("Only telemetry_rate_hz is writable", "permission_denied");
-            const auto value = number(request.value);
-            if (value < 1 || value > 20) throw TEMPEST::RemoteError("Telemetry rate must be 1 through 20 Hz", "invalid_argument");
-            rate = value;
-            log("Ground commanded telemetry rate: " + std::to_string(value) + " Hz");
-        };
-        channels.snapshot = [&](const DARTWIC::ChannelSnapshotTelemetry& snapshot) {
-            if (++ground_snapshots == 1) log("Received first ground channel snapshot");
-            if (const auto entry = snapshot.channels.find("rocket_qd_released"); entry != snapshot.channels.end()) {
-                const auto data = entry->second.object();
-                if (const auto v = data.find("value"); v != data.end()) ground_qd_released = number(v->second) == 1;
+        channels.upsertCommand = [&](const DARTWIC::ChannelUpsertRequest& request) {
+            for(const auto& change:request.changes){
+                if(change.channel!="telemetry_rate_hz"||!change.fields.value)throw TEMPEST::RemoteError("Only telemetry_rate_hz is writable","permission_denied");
+                const auto value=number(*change.fields.value);
+                if(value<1||value>20)throw TEMPEST::RemoteError("Telemetry rate must be 1 through 20 Hz","invalid_argument");
+                rate=value;log("Ground commanded telemetry rate: "+std::to_string(value)+" Hz");
             }
         };
-        channels.telemetry = [&](const DARTWIC::ChannelTelemetry& update) {
-            if (update.kind == DARTWIC::ChannelTelemetry::Kind::Upsert && update.upsert.channel == "rocket_qd_released")
-                ground_qd_released = number(update.upsert.value) == 1;
+        channels.snapshotTelemetry = [&](const DARTWIC::ChannelSnapshot& snapshot) {
+            if(++ground_snapshots==1)log("Received first ground channel snapshot");
+            for(const auto& c:snapshot.channels)if(c.channel=="rocket_qd_released"&&c.fields.value)ground_qd_released=number(*c.fields.value)==1;
+        };
+        channels.channelTelemetry = [&](const DARTWIC::ChannelUpdates& updates){
+            for(const auto& c:updates)if(c.channel=="rocket_qd_released"&&c.fields.value)ground_qd_released=number(*c.fields.value)==1;
         };
         protocol.channels().setHandlers(std::move(channels));
         protocol.logs().setHandlers({
-            .query=[&](const DARTWIC::LogQuery& query) {
+            .queryCommand=[&](const DARTWIC::LogQuery& query) {
                 std::vector<DARTWIC::LogEntry> result;
                 std::lock_guard lock(mutex);
                 for (const auto& entry:history) if ((query.stream.empty() || query.stream==entry.stream) &&
@@ -138,21 +131,19 @@ int main(int argc, char** argv) {
                 if (result.size()>query.limit) result.erase(result.begin(), result.end()-query.limit);
                 return result;
             },
-            .list=[&] { return std::vector<DARTWIC::LogStream>{{"FLIGHT_COMPUTER",peer.sessionId(),"Flight computer"}}; }
+            .listCommand=[&] { return std::vector<DARTWIC::LogStream>{{"FLIGHT_COMPUTER",peer.sessionId(),"Flight computer"}}; }
         });
         DARTWIC::ArgusEvent event{.event_id="flight-link-ready", .title="Mock flight computer ready",
             .description="The standalone flight peer completed registration. Its channels, operations and log stream are available.",
             .owner_node="FLIGHT_COMPUTER", .timestamp=timestamp(), .channels={"FLIGHT_COMPUTER:battery_voltage"},
             .separation_seconds=0.0};
         protocol.argus().setHandlers({
-            .query=[&](const auto&) { std::lock_guard lock(mutex); return DARTWIC::ArgusQueryResult{{event},1,1}; },
-            .action=[&](const DARTWIC::ArgusAction& action) {
-                if (action.event_id!=event.event_id) throw TEMPEST::RemoteError("Unknown event", "not_found");
-                std::lock_guard lock(mutex);
-                if (action.kind==DARTWIC::ArgusAction::Kind::UpdateStatus) event.status=action.payload.at("status").string();
-                else if (action.kind==DARTWIC::ArgusAction::Kind::Delete) event.status="deleted";
-                else throw TEMPEST::RemoteError("Unsupported event action", "unsupported");
-                return DARTWIC::ArgusActionResult{event.event_id,{{"status",event.status}}};
+            .queryCommand=[&](const auto&) { std::lock_guard lock(mutex); return DARTWIC::ArgusQueryResult{{event},1,1}; },
+            .updateStatusCommand=[&](const std::string& id,const std::string& status){
+                std::lock_guard lock(mutex);if(id!=event.event_id)throw TEMPEST::RemoteError("Unknown event","not_found");event.status=status;return DARTWIC::ArgusActionResult{id,{{"updated",true},{"status",status}}};
+            },
+            .removeCommand=[&](const std::string& id){
+                std::lock_guard lock(mutex);if(id!=event.event_id)throw TEMPEST::RemoteError("Unknown event","not_found");event.status="deleted";return DARTWIC::ArgusActionResult{id,{{"deleted",true}}};
             }
         });
         peer.registerOperation({.name="flight/launch", .display_name="Launch mock rocket",
@@ -186,7 +177,7 @@ int main(int argc, char** argv) {
             if (ready && (!connected || remote_session!=peer.remoteSession())) {
                 remote_session=peer.remoteSession();
                 log("Ground registration ready: " + peer.remoteNode());
-                { std::lock_guard lock(mutex); protocol.argus().publishTelemetry({.owner_node="FLIGHT_COMPUTER", .event=event}); }
+                { std::lock_guard lock(mutex); protocol.argus().publishEventTelemetry(event); }
             }
             if (!ready && connected) {
                 ground_qd_released = false;
@@ -206,17 +197,8 @@ int main(int argc, char** argv) {
                 if (height == 0) { velocity = 0; flight_phase = 3; log("Mock rocket landed"); }
             }
             if (ready && std::chrono::duration<double>(now-last_snapshot).count()>=1/rate.load()) {
-                TEMPEST::Value::Object records;
-                for (const auto& record:snapshots()) records[record.channel]=record.channel_data;
-                peer.publish("tempest-peer/channels/snapshot",{{"owner_node","FLIGHT_COMPUTER"}, {"channels",std::move(records)}, {"complete",true}});
-                {
-                    std::lock_guard lock(mutex);
-                    const auto payload = DARTWIC::EngineContract::payload(DARTWIC::ArgusEventTelemetry{.owner_node="FLIGHT_COMPUTER", .event=event});
-                    auto board_event = payload.at("event").object();
-                    // Board snapshots use ARGUS record identity, including node.
-                    board_event["node"] = "FLIGHT_COMPUTER";
-                    peer.publish("tempest-peer/argus/board-snapshot", {{"owner_node","FLIGHT_COMPUTER"}, {"events",TEMPEST::Value::Array{std::move(board_event)}}});
-                }
+                protocol.channels().publishSnapshotTelemetry({snapshots()});
+                {std::lock_guard lock(mutex);protocol.argus().publishSnapshotTelemetry({event.status=="deleted"?std::vector<DARTWIC::ArgusEvent>{}:std::vector<DARTWIC::ArgusEvent>{event}});}
                 last_snapshot=now;
             }
             std::this_thread::sleep_for(50ms); // Acquisition counter advances at 20 Hz; delivery defaults to 5 Hz.
