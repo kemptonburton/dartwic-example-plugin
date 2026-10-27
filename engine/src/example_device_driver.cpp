@@ -100,7 +100,6 @@ void registerExampleDeviceDriver(DARTWIC::API::SDK_API* api) {
                     state->writeBindings.push_back({index, api->createFixedChannel(command), api->createFixedChannel(readback)});
                     inputs.push_back(command);
                     api->upsertChannelField(readback, ChannelField::STALE_TIMEOUT, 1.0);
-                    api->setChannel(readback);
                     api->upsertChannelField(readback, ChannelField::RECORD_MODE, RecordMode::OnValueChange);
                 }
             } else {
@@ -113,14 +112,17 @@ void registerExampleDeviceDriver(DARTWIC::API::SDK_API* api) {
                     const std::array<std::string, 9> units = {"mA", "K", "K", "K", "kg/s", "", "", "s", ""};
                     api->upsertChannelField(channel, ChannelField::UNITS, units[index]);
                     api->upsertChannelField(channel, ChannelField::STALE_TIMEOUT, 1.0);
-                    api->setChannel(channel);
                     api->upsertChannelField(channel, ChannelField::RECORD_MODE, RecordMode::OnValueChange);
                 }
             }
             runtime.setFixedInputChannels(inputs);
             runtime.setTypedRuntimeContext("dev", state);
         };
-        task.on_start = [api, writer](const auto&, TaskRuntime&) {
+        task.on_start = [api, writer](const auto&, TaskRuntime& runtime) {
+            const auto state = runtime.getTypedRuntimeContext<DriverState>("dev");
+            if (!state) throw std::runtime_error("Example device task is not configured.");
+            if (writer) for (const auto& binding : state->writeBindings) api->setChannel(binding.readback);
+            else for (const auto& [index, channel] : state->readBindings) api->setChannel(channel);
             api->writeLog("Example device", writer ? "Write task started" : "Read task started");
         };
         task.on_task = [api, writer](const auto&, TaskRuntime& runtime, double) {

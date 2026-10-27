@@ -76,10 +76,16 @@ void registerStressDevice(DARTWIC::API::SDK_API* api) {
                 state->channels[i] = state->api->createFixedChannel(name);
                 state->api->upsertChannelField(name, ChannelField::RECORD_MODE, record_mode == "every_value" ? RecordMode::EveryValue : RecordMode::OnValueChange);
                 if (writer) inputs.push_back(name);
-                else state->api->setChannel(name);
             }
             runtime.setFixedInputChannels(inputs);
             runtime.setTypedRuntimeContext("stress", state);
+        };
+        task.on_start = [writer](const auto&, TaskRuntime& runtime) {
+            if (!writer) {
+                const auto state = runtime.getTypedRuntimeContext<State>("stress");
+                if (!state) throw std::runtime_error("Stress device task is not configured.");
+                for (const auto& channel : state->channels) state->api->setChannel(channel);
+            }
         };
         task.on_task = [writer](const auto&, TaskRuntime& runtime, double) {
             const auto state = runtime.getTypedRuntimeContext<State>("stress");
