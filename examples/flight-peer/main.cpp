@@ -136,7 +136,7 @@ int main(int argc, char** argv) {
         DARTWIC::ArgusEvent event{.event_id="flight-link-ready", .title="Mock flight computer ready",
             .description="The standalone flight peer completed registration. Its channels, operations and log stream are available.",
             .owner_node="FLIGHT_COMPUTER", .timestamp=timestamp(), .channels={"FLIGHT_COMPUTER:battery_voltage"},
-            .separation_seconds=0.0};
+            .firing_timeout_seconds=0.0};
         protocol.argus().setHandlers({
             .queryCommand=[&](const auto&) { std::lock_guard lock(mutex); return DARTWIC::ArgusQueryResult{{event},1,1}; },
             .updateStatusCommand=[&](const std::string& id,const std::string& status){
