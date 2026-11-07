@@ -4,7 +4,7 @@
 
 Configure `maximum` (default 1,000) and `threshold` (default 800) in the module's `parameters`. The maximum must be at least three; the threshold must be greater than one and less than the maximum. Each read advances one integer through a triangle wave between one and the maximum. All five input registers receive that value. The waveform follows completed reads, so missed releases increase its elapsed period.
 
-Create one `example_device_plugin.stress_read` task and one `example_device_plugin.stress_write` task for each instance. Both accept `module_instance_name`, `record_mode` (`on_value_change`, default, or `every_value`), and five rows in `read_mappings` or `write_mappings`:
+Create one `example_device_plugin.stress_read` task and one `example_device_plugin.stress_write` task for each instance. Select the module when creating each task, then add its mappings before starting it. Both accept `module_instance_name`, `record_mode` (`on_value_change`, default, or `every_value`), and require five rows in `read_mappings` or `write_mappings` at start:
 
 ```json
 {"register": 0, "channel": "stress_0000_in_1"}

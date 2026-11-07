@@ -39,6 +39,7 @@ struct State {
     std::shared_ptr<StressDeviceModule> module;
     DARTWIC::API::SDK_API* api = nullptr;
     std::array<DARTWIC::API::FixedChannelHandle, 5> channels;
+    bool all_mapped = false;
 };
 }
 void registerStressDevice(DARTWIC::API::SDK_API* api) {
@@ -47,8 +48,10 @@ void registerStressDevice(DARTWIC::API::SDK_API* api) {
     for (const bool writer : {false, true}) {
         TaskTypeDefinition task;
         task.metadata.structure = TaskStructure::Periodic;
-        task.metadata.default_arguments = {{"module_instance_name", "stress_0000"}, {"channel_prefix", "stress_0000"}};
-        task.on_configure = [api, writer](const auto&, TaskRuntime& runtime) {
+        const auto key = writer ? "write_mappings" : "read_mappings";
+        task.metadata.default_arguments = {{"module_instance_name", "stress_0000"},
+            {"channel_prefix", "stress_0000"}, {key, nlohmann::json::array()}};
+        task.on_configure = [api, writer, key](const auto&, TaskRuntime& runtime) {
             auto state = std::make_shared<State>();
             const auto args = runtime.getArguments();
             state->module = std::dynamic_pointer_cast<StressDeviceModule>(api->getModuleInstance(args.at("module_instance_name").template get<std::string>()));
@@ -56,12 +59,11 @@ void registerStressDevice(DARTWIC::API::SDK_API* api) {
             state->api = state->module->dartwic;
             const auto record_mode = args.value("record_mode", std::string{"on_value_change"});
             if (record_mode != "on_value_change" && record_mode != "every_value") throw std::runtime_error("Invalid stress record mode.");
-            const auto key = writer ? "write_mappings" : "read_mappings";
-            if (!args.contains(key) || !args.at(key).is_array() || args.at(key).size() != 5)
-                throw std::runtime_error("Map all five stress device registers.");
+            const auto rows = args.value(key, nlohmann::json::array());
+            if (!rows.is_array()) throw std::runtime_error("Stress device mappings must be an array.");
             std::array<bool, 5> used{};
             std::array<std::string, 5> names;
-            for (const auto& row : args.at(key)) {
+            for (const auto& row : rows) {
                 const int index = row.at("register").template get<int>();
                 const auto name = row.at("channel").template get<std::string>();
                 if (index < 0 || index >= 5 || used[index] || name.empty() || name.find('|') != std::string::npos)
@@ -72,18 +74,20 @@ void registerStressDevice(DARTWIC::API::SDK_API* api) {
             }
             std::vector<std::string> inputs;
             for (size_t i = 0; i < 5; ++i) {
+                if (!used[i]) continue;
                 const auto& name = names[i];
                 state->channels[i] = state->api->createFixedChannel(name);
                 state->api->upsertChannelField(name, ChannelField::RECORD_MODE, record_mode == "every_value" ? RecordMode::EveryValue : RecordMode::OnValueChange);
                 if (writer) inputs.push_back(name);
             }
+            state->all_mapped = rows.size() == state->channels.size();
             runtime.setFixedInputChannels(inputs);
             runtime.setTypedRuntimeContext("stress", state);
         };
         task.on_start = [writer](const auto&, TaskRuntime& runtime) {
+            const auto state = runtime.getTypedRuntimeContext<State>("stress");
+            if (!state || !state->all_mapped) throw std::runtime_error("Map all five stress device registers before starting this task.");
             if (!writer) {
-                const auto state = runtime.getTypedRuntimeContext<State>("stress");
-                if (!state) throw std::runtime_error("Stress device task is not configured.");
                 for (const auto& channel : state->channels) state->api->setChannel(channel);
             }
         };
