@@ -35,7 +35,7 @@ async function materializeInterfacePlugin(pluginId, runtimePath) {
     throw new Error(`Packaged interface runtime uses host version ${registration.internalHostVersion ?? "missing"}; expected ${INTERFACE_PLUGIN_HOST_VERSION}.`);
   }
   const stylesheet = elements.get(`dartwic-plugin-style-${pluginId}`)?.textContent ?? "";
-  if (!stylesheet.includes(".max-w-xl") || !stylesheet.includes("var(--card)")) {
+  if (!stylesheet.includes(".max-w-xl") || !stylesheet.includes("var(--schematic-node-background-1)") || !stylesheet.includes("var(--muted-foreground)")) {
     throw new Error(`Packaged interface runtime did not include theme-aware plugin styles for '${pluginId}'.`);
   }
   return registration.createPlugin({React: {}});
