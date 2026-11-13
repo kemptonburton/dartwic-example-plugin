@@ -1,4 +1,5 @@
 import React from "../sdk/react.ts";
+import {BaseNode} from "../sdk/schematic-nodes/index.ts";
 import {useDartwic, useDartwicChannelValues} from "../sdk/hooks/index.ts";
 import {displayDefaults, displaySettings, formatSample, openExampleSettings} from "./settings.mjs";
 import {exampleTaskMappings} from "./deviceBindings.mjs";
@@ -127,10 +128,12 @@ export function ExampleResource({setIsLoaded}) {
     );
 }
 
-export function ExampleSchematicNode({data}) {
+export function ExampleSchematicNode(props) {
     return (
-        <div className="h-full w-full rounded-md border border-border bg-card p-2 text-xs text-foreground">
-            {data?.label ?? "Example"}
+        <BaseNode {...props}>
+        <div className="h-full w-full rounded-md border border-schematic-node-outline bg-schematic-node-background-1 p-2 text-xs text-foreground">
+            {props.data?.label ?? "Example"}
         </div>
+        </BaseNode>
     );
 }

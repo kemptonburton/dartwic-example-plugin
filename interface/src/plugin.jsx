@@ -61,13 +61,18 @@ export default definePlugin({
             name: "Example Indicator",
             component: ExampleSchematicNode,
             dataDefaults: {label: "Example"},
+            propDefaults: {width: 160, height: 72},
             palette: {
-                defaults: {
-                    width: 160,
-                    height: 72,
-                },
+                category: "readouts",
             },
             resizable: true,
+        });
+        registry.addSchematicNodePreset({
+            id: "example_readout", name: "Example Readout", category: "readouts",
+            node: {type: "general", data: {general_settings: {
+                content: "readout", body_style: "card", body_shape: "rectangle",
+                readout: {type: "value", title: "EXAMPLE", units: "V"},
+            }}},
         });
         registry.addSettingsPanel({
             id: "general",
